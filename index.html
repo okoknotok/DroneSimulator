@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>Drone Blockly - 完整版 v3.4</title>
+<script src="https://unpkg.com/blockly/blockly.min.js"></script>
+<script src="https://unpkg.com/blockly/msg/zh-hant.js"></script>
+<script src="/js/firebase-config.js"></script>
+<script type="module" src="/js/firebase-sync.js"></script>
+<link rel=stylesheet href=/styles/main.css>
+</head>
+<body>
+
+<div id="startMenu" class="show">
+  <div class="menu-content">
+    <div class="menu-emoji">🚁</div>
+    <h1 class="menu-title">DRONE LAB</h1>
+    <div class="menu-subtitle">無人機編程實驗室</div>
+    <div class="mode-cards">
+      <div class="mode-card programming" onclick="enterMode('programming')">
+        <span class="card-icon">🧩</span>
+        <h2>編程模式</h2>
+        <p>使用 Blockly 積木編程控制無人機,挑戰 18 個關卡(含 3 個 AI 自動駕駛大關)。</p>
+        <div class="card-features">
+          <span class="feature-tag">📘 18 關</span>
+          <span class="feature-tag">🧠 邏輯思維</span>
+          <span class="feature-tag">♾️ 自動巡邏</span>
+        </div>
+      </div>
+      <div class="mode-card mission" onclick="enterMode('mission')">
+        <span class="card-icon">📚</span>
+        <h2>任務故事模式</h2>
+        <p>進入校園巡邏、災區搜救、農田巡檢、倉庫送貨和太空基地探索,用編程完成情境任務。</p>
+        <div class="card-features">
+          <span class="feature-tag mission-progress">🏁 0/0</span>
+          <span class="feature-tag">📖 故事任務</span>
+          <span class="feature-tag">🎯 情境目標</span>
+          <span class="feature-tag">🏅 任務評級</span>
+        </div>
+      </div>
+      <div class="mode-card freeflight" onclick="enterMode('freeflight')">
+        <span class="card-icon">🌃</span>
+        <h2>無盡 Cyberpunk</h2>
+        <p>5 階段越來越誇張的賽博龐克世界!射擊紅球、收集金幣、閃避能量牆,挑戰你的反應極限。</p>
+        <div class="card-features">
+          <span class="feature-tag">🌃 5 種場景</span>
+          <span class="feature-tag">💥 真實子彈</span>
+          <span class="feature-tag">🔥 越來越快</span>
+        </div>
+      </div>
+      <div class="mode-card builder" onclick="enterMode('builder')">
+        <span class="card-icon">🏗️</span>
+        <h2>關卡設計</h2>
+        <p>自己設計關卡!放置障礙物、設定起終點、加寶物,然後分享關卡碼畀同學挑戰。</p>
+        <div class="card-features">
+          <span class="feature-tag">🏗️ 自由設計</span>
+          <span class="feature-tag">📤 分享關卡</span>
+          <span class="feature-tag">📥 匯入挑戰</span>
+        </div>
+      </div>
+    </div>
+    <div class="role-panel">
+      <div class="role-header">
+        <strong>👤 使用身份</strong>
+        <span id="cloudStatus">離線模式</span>
+      </div>
+      <div class="role-actions">
+        <button onclick="setUserRole('guest')">訪客</button>
+        <button onclick="setUserRole('student')">學生</button>
+        <button onclick="setUserRole('teacher')">老師</button>
+        <input id="classNameInput" placeholder="班級名稱 / Class Code" onchange="setClassName(this.value)">
+      </div>
+      <div id="roleSummary" class="role-summary">目前：訪客</div>
+      <div id="teacherTools" class="teacher-tools">
+        <button onclick="exportProgressCsv()">匯出本機成績 CSV</button>
+        <button onclick="renderLocalLeaderboard()">更新排行榜</button>
+        <div id="localLeaderboard" class="local-leaderboard"></div>
+      </div>
+    </div>
+    <div style="margin-top: 40px; text-align: left; max-width: 800px; background: rgba(255,255,255,0.05); padding: 24px; border-radius: 16px; border: 1px solid rgba(79,195,247,0.3);">
+      <h3 style="color: #4fc3f7; margin-bottom: 16px; font-size: 18px;">📖 模式介紹</h3>
+      <div style="color: #b0c4de; font-size: 14px; line-height: 1.8;">
+        <p style="margin-bottom: 12px;"><strong style="color: #fff;">🧩 編程模式</strong> — 學習無人機編程的入門模式。使用 Blockly 積木拖曳組合程式,控制無人機起飛、移動、轉向,完成 18 個精心設計的關卡。進階關卡還包含 AI 自動巡邏和感測器應用。</p>
+        <p style="margin-bottom: 12px;"><strong style="color: #fff;">📚 任務故事模式</strong> — 用獨立故事任務挑戰無人機應用情境,包括校園巡邏、災區搜救、農田巡檢、倉庫送貨和太空基地探索。</p>
+        <p style="margin-bottom: 12px;"><strong style="color: #fff;">🌃 無盡 Cyberpunk</strong> — 手動操控模式,體驗賽博龐克世界的刺激。使用 WASD 移動、滑鼠射擊紅球、收集金幣、閃避能量牆。5 個階段難度遞增,考驗你的反應和操控技巧。</p>
+        <p><strong style="color: #fff;">🏗️ 關卡設計</strong> — 發揮創意,自己設計關卡!在網格上放置障礙物、檢查點和寶物,設定起終點,然後生成關卡碼分享給同學挑戰。零成本分享,無需伺服器。</p>
+      </div>
+    </div>
+    <div class="menu-footer">© Drone Lab · Powered by Babylon.js + Blockly</div>
+  </div>
+</div>
+
+<div id="app">
+  <div id="stage">
+    <canvas id="renderCanvas"></canvas>
+    
+    <button id="backToMenu" onclick="backToMenu()">🏠 返回選單</button>
+    
+    <div id="hud">
+      <div class="row"><span class="label">位置</span><span class="val">X:<span id="px">0.0</span> Z:<span id="pz">0.0</span></span></div>
+      <div class="row"><span class="label">格座標</span><span class="val">(<span id="gx">0</span>, <span id="gz">0</span>)</span></div>
+      <div class="row"><span class="label">方向</span><span class="val"><span id="pd">0°</span> <span id="pdn">→東</span></span></div>
+      <div class="row prog-only"><span class="label">距終點</span><span class="val"><span id="pdist">--</span> 格</span></div>
+      <div class="row"><span class="label">狀態</span><span id="ps" class="status">待機</span></div>
+      <div class="extras prog-only" id="extrasInfo" style="display:none"></div>
+      <div class="fail prog-only" id="failInfo" style="display:none">失敗次數:<span id="failNum">0</span></div>
+    </div>
+    
+    <div id="levelPanel">
+      <div id="lvHeader" onclick="togglePanel()">
+        <span class="lv-title">📘 第 <span id="lvNum">1</span> 關:<span id="lvName">--</span></span>
+        <button id="lvToggle" title="收起/展開">▼</button>
+      </div>
+      <div id="lvBody">
+        <div class="lv-desc" id="lvDesc">--</div>
+        <div class="lv-goal">🎯 <span id="lvGoal">--</span></div>
+        <div class="lv-meta" id="lvMeta">--</div>
+        <select id="lvSelect" onchange="loadLevel(parseInt(this.value))"></select>
+        <div class="lv-nav">
+          <button id="lvPrev" onclick="changeLevel(-1)">◀ 上一關</button>
+          <button id="lvRestart" onclick="loadLevel(currentLevel)">🔄 重玩</button>
+          <button id="lvNext" class="next" onclick="changeLevel(1)">下一關 ▶</button>
+        </div>
+        <div id="hintBox">
+          <div class="hint-title">💡 小提示</div>
+          <div id="hintText">--</div>
+        </div>
+        <button id="ansBtn" onclick="askShowAnswer()">📖 顯示參考答案</button>
+      </div>
+    </div>
+    
+    <div id="minimap">
+      <div class="mm-title">小地圖(北↑)</div>
+      <canvas id="mmCanvas" width="180" height="135"></canvas>
+    </div>
+    
+    <div id="gameHud">
+      <div class="game-stat-group">
+        <div class="game-stat">
+          <div class="stat-label">SCORE</div>
+          <div class="stat-value" id="gScore">0</div>
+        </div>
+        <div class="game-stat stage">
+          <div class="stat-label">STAGE</div>
+          <div class="stat-value" id="gStage">CYBER NIGHT</div>
+        </div>
+        <div class="game-stat combo" id="gComboBox">
+          <div class="stat-label">COMBO</div>
+          <div class="stat-value" id="gCombo">×0</div>
+        </div>
+      </div>
+      <div class="game-stat-group">
+        <div class="game-stat speed">
+          <div class="stat-label">SPEED</div>
+          <div class="stat-value" id="gSpeed">1.0×</div>
+        </div>
+        <div class="game-stat lives">
+          <div class="stat-label">LIVES</div>
+          <div class="stat-value" id="gLives">❤❤❤</div>
+        </div>
+      </div>
+    </div>
+    
+    <div id="crosshair">
+      <div class="ch-ring"></div>
+      <div class="ch-dot"></div>
+      <div class="ch-line t"></div>
+      <div class="ch-line b"></div>
+      <div class="ch-line l"></div>
+      <div class="ch-line r"></div>
+    </div>
+    
+    <div id="gameInstructions">
+      ⌨️ <b>WASD/方向鍵</b> 移動 &nbsp;·&nbsp; <b>Shift</b> 加速衝刺 &nbsp;·&nbsp; 🖱️ <b>左鍵</b> 射擊 <span class="red">紅球</span> &nbsp;·&nbsp; 🟡 撞金幣 &nbsp;·&nbsp; ✨ 吃發光道具
+    </div>
+
+    <div id="builderToolbar">
+      <div class="tool-group">
+        <span style="color:#FFBF00;font-weight:700;font-size:12px;margin-right:4px;">🏗️ 設計</span>
+      </div>
+      <div class="tool-sep"></div>
+      <div class="tool-group" id="toolBtns"></div>
+      <div class="tool-sep"></div>
+      <div class="tool-group">
+        <button class="tool-btn action" onclick="builderTestRun()">▶ 試玩</button>
+        <button class="tool-btn export" onclick="builderShowShare()">📤 分享</button>
+        <button class="tool-btn danger" onclick="builderClearAll()">🗑️ 清空</button>
+      </div>
+    </div>
+
+    <div id="builderPalette">
+      <div class="pal-title">📦 放置物件</div>
+      <div id="palItems"></div>
+    </div>
+
+    <div id="builderInfo">
+      <div class="info-row"><span>格子</span> <span class="info-val" id="bInfoCell">--</span></div>
+      <div class="info-row"><span>障礙</span> <span class="info-val" id="bInfoObs">0</span></div>
+      <div class="info-row"><span>檢查點</span> <span class="info-val" id="bInfoCp">0</span></div>
+      <div class="info-row"><span>寶物</span> <span class="info-val" id="bInfoTr">0</span></div>
+    </div>
+
+    <div id="builderShareModal">
+      <div class="share-box">
+        <h2>📤 分享關卡</h2>
+        <div class="share-meta">
+          <label>關卡名稱 <input id="builderLevelName" type="text" value="自訂關卡"></label>
+          <label>關卡描述 <textarea id="builderLevelDesc">你設計的關卡</textarea></label>
+          <label>過關目標 <textarea id="builderLevelGoal">到達終點並降落</textarea></label>
+          <label>提示文字 <textarea id="builderLevelHint">用 Blockly 編程到達終點!</textarea></label>
+          <label>最大步數 <input id="builderMaxMoves" type="number" min="0" value="0"></label>
+          <label class="inline-check"><input id="builderRequireCheckpoints" type="checkbox" checked> 必須通過全部檢查點</label>
+          <label class="inline-check"><input id="builderRequireTreasures" type="checkbox" checked> 必須收集全部寶物</label>
+        </div>
+        <div class="share-tabs">
+          <button class="share-tab active" onclick="switchShareTab('code')">🔑 關卡碼</button>
+          <button class="share-tab" onclick="switchShareTab('import')">📥 匯入關卡</button>
+        </div>
+        <div id="shareTabCode">
+          <p>複製以下關卡碼,同學撳「匯入關卡」貼上即可挑戰!</p>
+          <textarea class="share-code" id="shareCodeOut" readonly></textarea>
+          <div class="share-btns">
+            <button class="btn-copy" onclick="copyShareCode()">📋 複製</button>
+            <button class="btn-close-share" onclick="closeBuilderShare()">關閉</button>
+          </div>
+        </div>
+        <div id="shareTabImport" style="display:none">
+          <p>貼上同學的關卡碼,即可匯入並挑戰!</p>
+          <textarea class="share-code" id="shareCodeIn" placeholder="貼上關卡碼..."></textarea>
+          <div class="share-btns">
+            <button class="btn-import" onclick="importShareCode()">📥 匯入</button>
+            <button class="btn-close-share" onclick="closeBuilderShare()">關閉</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="missionBottomNav" class="mission-bottom-nav">
+      <div id="missionGuideDock" class="mission-guide-dock collapsed"></div>
+      <div id="missionMapPanel" class="mission-map-panel expanded">
+        <div class="mission-map-head">
+          <button type="button" class="mission-map-summary" onclick="MissionMode.toggleMap()" title="點擊展開或收合關卡地圖">
+            <span id="missionMapSummary" class="mission-map-summary-text">🏫 校園巡邏 · 1. 新手起飛檢查</span>
+            <span id="missionMapToggle" class="mission-map-toggle-label">收合關卡地圖 ▲</span>
+          </button>
+          <button type="button" class="ghost" onclick="MissionMode.showProfile()">學習檔案</button>
+        </div>
+        <div class="mission-map-body">
+          <div id="missionLevelBar" class="mission-level-bar"></div>
+          <div id="missionChapterBar" class="mission-chapter-bar"></div>
+          <div class="mission-bottom-head">
+            <span id="missionProgressSummary">0/0 關完成</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="missionHud">
+      <div class="mission-hud-title">任務狀態</div>
+      <div class="mission-hud-row"><span>掃描</span><strong id="mhScans">0/0</strong></div>
+      <div class="mission-hud-row"><span>收集</span><strong id="mhItems">0/0</strong></div>
+      <div class="mission-hud-row"><span>電量</span><strong id="mhBattery">100%</strong></div>
+      <div class="mission-hud-row"><span>貨物</span><strong id="mhCargo">無</strong></div>
+      <div class="mission-hud-row"><span>天氣</span><strong id="mhWeather">--</strong></div>
+      <div class="mission-hud-row"><span>狀態</span><strong id="mhState">待命</strong></div>
+    </div>
+
+    <div id="missionTutorial" class="mission-tutorial-panel"></div>
+    <div id="missionReplay" class="mission-replay-panel"></div>
+    <div id="missionProfile" class="mission-profile-panel"></div>
+
+    <div id="missionWeather" class="mission-weather"></div>
+
+    <div id="powerupBar"></div>
+    <div id="damageFlash"></div>
+    <div id="stageFlash"></div>
+    <div id="comboPopup"></div>
+    
+    <div id="stageBanner">
+      <div class="stage-label">STAGE <span id="sbNum">1</span></div>
+      <div class="stage-name" id="sbName">CYBER NIGHT</div>
+      <div class="stage-line"></div>
+    </div>
+    
+    <div id="countdownOverlay">
+      <div id="countdownText">3</div>
+    </div>
+    
+    <div id="toast"></div>
+    
+    <div id="winModal" class="modal-overlay">
+      <div class="modal-box">
+        <h2 id="winTitle">🎉 過關!</h2>
+        <p id="winMsg">恭喜完成本關!</p>
+        <div class="modal-btns">
+          <button class="stay-btn" onclick="closeModal('winModal')">留在本關</button>
+          <button class="stay-btn" onclick="replayLastMission()">重播路線</button>
+          <button class="next-btn" id="winNext" onclick="goNextFromModal()">下一關 ▶</button>
+        </div>
+      </div>
+    </div>
+    
+    <div id="ansModal" class="modal-overlay">
+      <div class="modal-box hint">
+        <h2>📖 顯示參考答案?</h2>
+        <p>你已經嘗試超過 10 次了,要載入參考答案嗎?</p>
+        <div class="modal-btns">
+          <button class="stay-btn" onclick="closeModal('ansModal')">再試一次</button>
+          <button class="confirm-btn" onclick="applyAnswer()">載入答案</button>
+        </div>
+      </div>
+    </div>
+    
+    <div id="gameOverModal" class="modal-overlay">
+      <div class="modal-box gameover">
+        <h2>💥 GAME OVER</h2>
+        <p>你的無人機被摧毀了!別氣餒,再挑戰一次吧 🚀</p>
+        <div class="gameover-stats">
+          <div class="gs-item">
+            <div class="gs-label">FINAL SCORE</div>
+            <div class="gs-value highlight" id="goScore">0</div>
+          </div>
+          <div class="gs-item">
+            <div class="gs-label">MAX STAGE</div>
+            <div class="gs-value" id="goStage">1</div>
+          </div>
+          <div class="gs-item">
+            <div class="gs-label">MAX COMBO</div>
+            <div class="gs-value" id="goMaxCombo">0</div>
+          </div>
+          <div class="gs-item">
+            <div class="gs-label">ACCURACY</div>
+            <div class="gs-value" id="goAccuracy">0%</div>
+          </div>
+        </div>
+        <div class="modal-btns">
+          <button class="stay-btn" onclick="backToMenu()">返回選單</button>
+          <button class="restart-btn" onclick="restartEndlessGame()">🔄 再來一次</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="missionResultModal" class="modal-overlay">
+      <div class="modal-box">
+        <h2 id="missionResultTitle">任務完成</h2>
+        <p id="missionResultText">--</p>
+        <div class="modal-btns">
+          <button class="stay-btn" onclick="closeModal('missionResultModal')">留在任務</button>
+          <button class="stay-btn" onclick="MissionMode.replayRoute(true); closeModal('missionResultModal')">重播路線</button>
+          <button class="stay-btn" onclick="MissionMode.shareSolution()">複製解法碼</button>
+          <button class="next-btn" id="missionResultNext" onclick="MissionMode.nextMission()">下一關 ▶</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="missionDialogue" class="mission-dialogue">
+      <div class="dialogue-avatar" id="dialogueAvatar">指</div>
+      <div class="dialogue-content">
+        <div class="dialogue-speaker" id="dialogueSpeaker">指揮官</div>
+        <div class="dialogue-text" id="dialogueText">--</div>
+      </div>
+      <button onclick="MissionMode.nextDialogue()">下一句</button>
+    </div>
+  </div>
+  
+  <div id="divider" title="拖曳調整寬度"></div>
+  
+  <div id="blocksArea">
+    <div id="blocklyHeader">
+      <div class="title">🧩 積木編程</div>
+      <div class="actions">
+        <button class="btn-run" id="btnRun" onclick="runProgram()">▶ 執行</button>
+        <button class="btn-run" id="btnStep" onclick="stepProgram()">👣 單步</button>
+        <button class="btn-stop" id="btnStop" onclick="stopProgram()" disabled>⏹ 停止</button>
+        <button class="btn-reset" onclick="resetAll()">🔄 重置</button>
+        <button class="btn-clear" onclick="clearBlocks()">🗑️ 清空</button>
+        <button class="btn-clear" onclick="resetSavedProgress()">🧹 重置進度</button>
+        <select id="execSpeed" onchange="setExecutionSpeed(this.value)" title="執行速度">
+          <option value="0.5">慢速 0.5×</option>
+          <option value="1" selected>標準 1×</option>
+          <option value="2">快速 2×</option>
+        </select>
+      </div>
+    </div>
+    <div id="blocklyDiv"></div>
+  </div>
+</div>
+
+<xml id="toolbox" style="display: none">
+  <category name="▶ 事件" colour="#FFBF00">
+    <block type="event_start"></block>
+  </category>
+  <category name="⚡ 動作" colour="#4CBF56">
+    <block type="action_takeoff"></block>
+    <block type="action_land"></block>
+    <block type="action_wait"><field name="MS">500</field></block>
+    <block type="action_set_speed"><field name="SPEED">1</field></block>
+  </category>
+  <category name="🎯 移動" colour="#4C97FF">
+    <block type="move_forward"><field name="STEPS">1</field></block>
+    <block type="move_backward"><field name="STEPS">1</field></block>
+    <block type="move_left"><field name="STEPS">1</field></block>
+    <block type="move_right"><field name="STEPS">1</field></block>
+    <block type="turn_left"></block>
+    <block type="turn_right"></block>
+  </category>
+  <category name="🔁 控制" colour="#FFAB19">
+    <block type="control_repeat"><field name="TIMES">4</field></block>
+    <block type="control_repeat_forever"></block>
+    <block type="control_repeat_until_target"></block>
+    <block type="control_if_obstacle"></block>
+    <block type="control_if"></block>
+  </category>
+  <category name="📡 感測" colour="#5CB1D6">
+    <block type="sense_distance"></block>
+    <block type="sense_at_target"></block>
+    <block type="sense_obstacle_ahead"></block>
+    <block type="sense_all_collected"></block>
+    <block type="sense_current_x"></block>
+    <block type="sense_current_z"></block>
+    <block type="sense_current_direction"></block>
+    <block type="sense_at_checkpoint"></block>
+  </category>
+</xml>
+
+<xml id="missionToolbox" style="display: none">
+  <category name="▶ 任務" colour="#FFBF00">
+    <block type="event_start"></block>
+    <block type="mission_scan"></block>
+    <block type="mission_pickup"></block>
+    <block type="mission_dropoff"></block>
+    <block type="mission_charge"></block>
+    <block type="mission_photo"></block>
+    <block type="mission_collect"></block>
+    <block type="mission_sample"></block>
+    <block type="mission_report"></block>
+  </category>
+  <category name="⚡ 飛行" colour="#4CBF56">
+    <block type="action_takeoff"></block>
+    <block type="action_land"></block>
+    <block type="action_wait"><field name="MS">500</field></block>
+    <block type="action_set_speed"><field name="SPEED">1</field></block>
+  </category>
+  <category name="🎯 移動" colour="#4C97FF">
+    <block type="move_forward"><field name="STEPS">1</field></block>
+    <block type="move_backward"><field name="STEPS">1</field></block>
+    <block type="move_left"><field name="STEPS">1</field></block>
+    <block type="move_right"><field name="STEPS">1</field></block>
+    <block type="turn_left"></block>
+    <block type="turn_right"></block>
+  </category>
+  <category name="🔁 控制" colour="#FFAB19">
+    <block type="control_repeat"><field name="TIMES">4</field></block>
+    <block type="control_if"></block>
+    <block type="mission_repeat_until_done"></block>
+  </category>
+  <category name="📡 任務感測" colour="#5CB1D6">
+    <block type="mission_danger_ahead"></block>
+    <block type="mission_heat_ahead"></block>
+    <block type="mission_at_task_point"></block>
+    <block type="mission_battery_low"></block>
+    <block type="mission_has_cargo"></block>
+    <block type="mission_done"></block>
+  </category>
+</xml>
+
+<div id="tutorialOverlay" class="tutorial-overlay">
+  <div class="tutorial-card">
+    <h2>新手教學</h2>
+    <ol id="tutorialSteps"></ol>
+    <div class="tutorial-actions">
+      <button onclick="hideTutorial()">知道了</button>
+      <button onclick="loadTutorialBlocks()">載入示範積木</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/src/babylon-entry.js"></script>
+</body>
+</html>

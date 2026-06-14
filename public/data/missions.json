@@ -1,0 +1,3974 @@
+{
+  "chapters": [
+    {
+      "id": "campus",
+      "title": "校園巡邏",
+      "icon": "🏫",
+      "theme": "campus",
+      "introDialogue": [
+        {
+          "speaker": "教官",
+          "text": "歡迎加入無人機校園巡邏隊。先從安全起降和巡邏點掃描開始。"
+        },
+        {
+          "speaker": "校園管理員",
+          "text": "今天要確認操場、教學樓和花圃一切正常。"
+        }
+      ],
+      "endingDialogue": [
+        {
+          "speaker": "教官",
+          "text": "校園巡邏完成。你已掌握基礎航線規劃。"
+        }
+      ],
+      "objects": [
+        {
+          "type": "building",
+          "label": "教學樓",
+          "x": -3,
+          "z": -3,
+          "model": "/assets/models/school-building.glb"
+        },
+        {
+          "type": "field",
+          "label": "操場",
+          "x": 3,
+          "z": 0,
+          "model": "/assets/models/sports-field.glb"
+        },
+        {
+          "type": "tree",
+          "label": "校園樹 A",
+          "x": -6,
+          "z": 1,
+          "model": "/assets/models/tree.glb"
+        },
+        {
+          "type": "tree",
+          "label": "校園樹 B",
+          "x": 1,
+          "z": 4,
+          "model": "/assets/models/tree.glb"
+        },
+        {
+          "type": "tree",
+          "label": "校園樹 C",
+          "x": 5,
+          "z": -2,
+          "model": "/assets/models/tree.glb"
+        },
+        {
+          "type": "streetLight",
+          "label": "路燈 A",
+          "x": -5,
+          "z": -1
+        },
+        {
+          "type": "streetLight",
+          "label": "路燈 B",
+          "x": 5,
+          "z": 2
+        }
+      ],
+      "missions": [
+        {
+          "id": "campus-1",
+          "title": "新手起飛檢查",
+          "brief": "先完成起飛、前往操場巡邏點、降落。",
+          "goal": "到達操場巡邏點並安全降落。",
+          "tutorial": "像 MakeCode 教學卡一樣，先拖出「起飛 → 前進 → 降落」。",
+          "dialogueStart": [
+            {
+              "speaker": "教官",
+              "text": "歡迎加入無人機校園巡邏隊，小航！今天是你入學第一天。"
+            },
+            {
+              "speaker": "小航",
+              "text": "報到！我準備好了，想快點飛看看！"
+            },
+            {
+              "speaker": "教官",
+              "text": "先別急，確認起飛和降落流程。到操場標記點後降落。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "教官",
+              "text": "起降穩定！校園巡邏任務可以正式開始了。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "先別急，確認到達目標點後才降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": 2,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "操場巡邏點",
+              "x": 2,
+              "z": 3
+            },
+            {
+              "type": "npc",
+              "label": "校園學生",
+              "role": "student",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "atTarget": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 8,
+            "battery": 70
+          },
+          "concept": "sequence",
+          "conceptLabel": "順序執行",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"><next><block type=\"action_takeoff\"></block></next></block></xml>",
+          "hintSteps": [
+            "先放入「起飛」積木。",
+            "加入「前進」積木，讓無人機飛到操場方向。",
+            "到達目標區後加入「降落」。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "action_takeoff",
+              "hint": "先加入「起飛」積木"
+            },
+            {
+              "block": "move_forward",
+              "hint": "加入「前進」飛向操場"
+            },
+            {
+              "block": "action_land",
+              "hint": "到達後加入「降落」"
+            }
+          ],
+          "storyBeat": 1,
+          "storyTitle": "入學第一天"
+        },
+        {
+          "id": "campus-2",
+          "title": "操場巡邏",
+          "brief": "依序掃描操場、跑道和花圃。",
+          "goal": "掃描 3 個巡邏點。",
+          "tutorial": "使用「掃描任務點」積木，去到每個黃色掃描圈後執行一次。",
+          "dialogueStart": [
+            {
+              "speaker": "校園管理員",
+              "text": "小航，操場今天有活動，請掃描兩個巡邏點確認安全。"
+            },
+            {
+              "speaker": "教官",
+              "text": "記得按順序飛，每個點都要「掃描任務點」。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "校園管理員",
+              "text": "操場一切正常，謝謝你！"
+            },
+            {
+              "speaker": "教官",
+              "text": "掃描技巧不錯，下一關要學拍照記錄。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "兩個巡邏點都要掃描到喔。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "操場",
+              "x": 2,
+              "z": 3
+            },
+            {
+              "type": "scan",
+              "label": "跑道",
+              "x": 4,
+              "z": 0
+            },
+            {
+              "type": "scan",
+              "label": "花圃",
+              "x": -1,
+              "z": -2
+            },
+            {
+              "type": "npc",
+              "label": "路過的同學",
+              "role": "student",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            },
+            {
+              "type": "npc",
+              "label": "校園學生",
+              "role": "student",
+              "x": -7,
+              "z": -2,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -2
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true
+          },
+          "stars": {
+            "moves": 18,
+            "battery": 55
+          },
+          "concept": "sequence-scan",
+          "conceptLabel": "定點掃描",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "每個巡邏點都要先飛到黃色掃描圈。",
+            "到達後執行一次「掃描任務點」。",
+            "依序完成 3 個掃描點。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "action_takeoff",
+              "hint": "先起飛再規劃路線"
+            },
+            {
+              "block": "mission_scan",
+              "hint": "每個巡邏點都要「掃描任務點」"
+            }
+          ],
+          "storyBeat": 2,
+          "storyTitle": "操場巡邏"
+        },
+        {
+          "id": "campus-3",
+          "title": "夜間警報",
+          "brief": "路燈旁出現異常訊號，前往拍照並掃描。",
+          "goal": "掃描異常點並拍照。",
+          "tutorial": "像 Scratch 角色故事一樣，先觸發場景事件，再用「拍照記錄」留下證據。",
+          "dialogueStart": [
+            {
+              "speaker": "教官",
+              "text": "校園進入夜間模式了。教學樓那邊有異常訊號，去拍張照。"
+            },
+            {
+              "speaker": "小航",
+              "text": "夜間飛行……好酷！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "教官",
+              "text": "只是路燈故障，處理好了。你學會用拍照記錄現場了！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "先到教學樓任務點，再執行拍照。"
+            }
+          ],
+          "start": {
+            "x": -4,
+            "z": 4,
+            "dir": 0
+          },
+          "target": {
+            "x": 5,
+            "z": 2
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "異常訊號",
+              "x": 5,
+              "z": 2
+            },
+            {
+              "type": "npc",
+              "label": "校園學生",
+              "role": "student",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "photos": 1
+          },
+          "stars": {
+            "moves": 14,
+            "battery": 60
+          },
+          "concept": "sequence-events",
+          "conceptLabel": "事件與記錄",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "先飛到異常訊號點。",
+            "使用「掃描任務點」記錄位置。",
+            "再使用「拍照記錄」留下證據。"
+          ],
+          "weatherOverride": "night",
+          "photoAt": "異常訊號",
+          "tutorialChecks": [
+            {
+              "block": "mission_scan",
+              "hint": "到異常點後使用「掃描任務點」"
+            },
+            {
+              "block": "mission_photo",
+              "hint": "掃描後在同一點「拍照記錄」"
+            }
+          ],
+          "storyBeat": 3,
+          "storyTitle": "夜景警報"
+        },
+        {
+          "id": "campus-4",
+          "title": "完整校園安全評估",
+          "brief": "完成全部巡邏點並返回起點。",
+          "goal": "掃描全部巡邏點，回到起點降落。",
+          "tutorial": "嘗試使用重複積木簡化巡邏路線，看看能否減少步數。",
+          "dialogueStart": [
+            {
+              "speaker": "教官",
+              "text": "最後一關：掃描全部巡邏點，完成校園總巡邏。"
+            },
+            {
+              "speaker": "校園管理員",
+              "text": "花圃和路燈都要確認，拜託了！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "教官",
+              "text": "校園巡邏章節完成！校外有緊急任務在等你。"
+            },
+            {
+              "speaker": "小航",
+              "text": "校外？我準備好了！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "還有巡邏點沒掃描，對照目標清單檢查。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "操場",
+              "x": 3,
+              "z": 3
+            },
+            {
+              "type": "scan",
+              "label": "教學樓",
+              "x": -3,
+              "z": -3
+            },
+            {
+              "type": "scan",
+              "label": "花圃",
+              "x": 5,
+              "z": -2
+            },
+            {
+              "type": "npc",
+              "label": "路過的同學",
+              "role": "student",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            },
+            {
+              "type": "npc",
+              "label": "校園學生",
+              "role": "student",
+              "x": -7,
+              "z": -2,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -2
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 24,
+            "battery": 45
+          },
+          "concept": "loop",
+          "conceptLabel": "重複與優化",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "規劃巡邏順序，減少重複轉彎。",
+            "可嘗試用「重複」積木簡化掃描流程。",
+            "完成後返回起點並降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "control_repeat",
+              "hint": "試試用「重複」簡化多次掃描"
+            },
+            {
+              "block": "action_land",
+              "hint": "完成後記得返回起點降落"
+            }
+          ],
+          "storyBeat": 4,
+          "storyTitle": "花圃總巡邏"
+        }
+      ]
+    },
+    {
+      "id": "rescue",
+      "title": "災區搜救",
+      "icon": "🚑",
+      "theme": "rescue",
+      "introDialogue": [
+        {
+          "speaker": "救援指揮官",
+          "text": "地震後部分道路受阻。無人機需要先替救援隊取得安全路線。"
+        }
+      ],
+      "endingDialogue": [
+        {
+          "speaker": "救援指揮官",
+          "text": "定位資料已送達，救援隊可以安全進入。"
+        }
+      ],
+      "objects": [
+        {
+          "type": "base",
+          "label": "救援基地",
+          "x": -5,
+          "z": -2,
+          "model": "/assets/models/rescue-tent.glb"
+        },
+        {
+          "type": "rubble",
+          "label": "瓦礫堆 A",
+          "x": 0,
+          "z": 3,
+          "model": "/assets/models/rubble.glb"
+        },
+        {
+          "type": "rubble",
+          "label": "瓦礫堆 B",
+          "x": 4,
+          "z": 1,
+          "model": "/assets/models/rubble.glb"
+        },
+        {
+          "type": "beacon",
+          "label": "救援信標",
+          "x": -3,
+          "z": 2
+        }
+      ],
+      "missions": [
+        {
+          "id": "rescue-1",
+          "title": "進入災區",
+          "brief": "飛到第一個安全掃描點，建立入口路線。",
+          "goal": "掃描安全入口。",
+          "dialogueStart": [
+            {
+              "speaker": "教官",
+              "text": "校園外廢墟傳來求救訊號，這是你第一次校外任務。"
+            },
+            {
+              "speaker": "搜救隊長",
+              "text": "請掃描求救點，確認人員位置！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "搜救隊長",
+              "text": "訊號確認！人員安全，謝謝小航！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "飛到黃色掃描圈再執行掃描。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 0,
+            "dir": 0
+          },
+          "target": {
+            "x": 1,
+            "z": 2
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "安全入口",
+              "x": 1,
+              "z": 2
+            },
+            {
+              "type": "npc",
+              "label": "倉庫巡邏員",
+              "role": "worker",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true
+          },
+          "stars": {
+            "moves": 12,
+            "battery": 65
+          },
+          "concept": "sequence",
+          "conceptLabel": "順序執行",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "起飛後前往安全入口。",
+            "到達黃色掃描圈後執行掃描。",
+            "確認入口安全再深入災區。"
+          ],
+          "storyBeat": 5,
+          "storyTitle": "廢墟求救"
+        },
+        {
+          "id": "rescue-2",
+          "title": "搜尋求救信號",
+          "brief": "掃描兩個求救信號源。",
+          "goal": "掃描求救信號 A 和 B。",
+          "dialogueStart": [
+            {
+              "speaker": "搜救隊長",
+              "text": "還有第二個求救點，兩邊都要掃描。"
+            },
+            {
+              "speaker": "教官",
+              "text": "規劃好路線，少走冤枉路。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "教官",
+              "text": "兩點都掃描完成！廢墟裡有危險區，下一關要小心。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "搜救隊長",
+              "text": "兩個求救點都要掃描才算完成。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 0,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 0
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "求救信號 A",
+              "x": 1,
+              "z": 2
+            },
+            {
+              "type": "scan",
+              "label": "求救信號 B",
+              "x": 5,
+              "z": -3
+            },
+            {
+              "type": "npc",
+              "label": "工地巡邏員",
+              "role": "worker",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true
+          },
+          "stars": {
+            "moves": 20,
+            "battery": 55
+          },
+          "concept": "sequence-scan",
+          "conceptLabel": "定點掃描",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "先掃描求救信號 A。",
+            "再移動到求救信號 B 掃描。",
+            "兩個信號都要掃描才算完成。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_scan",
+              "hint": "兩個求救點都要掃描"
+            }
+          ],
+          "storyBeat": 6,
+          "storyTitle": "雙點搜救"
+        },
+        {
+          "id": "rescue-3",
+          "title": "危險瓦礫區",
+          "brief": "利用前方危險感測，避開瓦礫。",
+          "goal": "避開危險區並到達掃描點。",
+          "dialogueStart": [
+            {
+              "speaker": "教官",
+              "text": "前方有瓦礫危隺區！用「如果」和「前方有危險?」來繞路。"
+            },
+            {
+              "speaker": "小航",
+              "text": "像玩迷宮一樣……我試試看！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "教官",
+              "text": "聰明繞路！你學會用感測積木做判斷了。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "撞進瓦礫會任務失敗，用條件判斷避開。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 0,
+            "dir": 0
+          },
+          "target": {
+            "x": 5,
+            "z": -3
+          },
+          "objects": [
+            {
+              "type": "hazard",
+              "label": "倒塌區",
+              "x": -1,
+              "z": 0,
+              "model": "/assets/models/rubble.glb"
+            },
+            {
+              "type": "hazard",
+              "label": "危險瓦礫",
+              "x": 2,
+              "z": -2,
+              "model": "/assets/models/rubble.glb"
+            },
+            {
+              "type": "scan",
+              "label": "安全通道",
+              "x": 5,
+              "z": -3
+            },
+            {
+              "type": "npc",
+              "label": "救援志工",
+              "role": "worker",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "atTarget": true
+          },
+          "stars": {
+            "moves": 22,
+            "battery": 45
+          },
+          "concept": "if-sensor",
+          "conceptLabel": "條件感測",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "使用「如果」積木判斷前方危險。",
+            "前方有危險就轉向繞路。",
+            "安全時再前進並掃描目標點。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "control_if",
+              "hint": "加入「如果」判斷前方危險"
+            },
+            {
+              "block": "mission_danger_ahead",
+              "hint": "使用「前方有危險?」感測積木"
+            },
+            {
+              "block": "mission_scan",
+              "hint": "避開瓦礫後掃描安全通道"
+            }
+          ],
+          "storyBeat": 7,
+          "storyTitle": "避開瓦礫"
+        },
+        {
+          "id": "rescue-4",
+          "title": "返回救援基地",
+          "brief": "完成掃描後回到救援基地降落。",
+          "goal": "掃描信號並返回基地。",
+          "dialogueStart": [
+            {
+              "speaker": "搜救隊長",
+              "text": "最後掃描安全通道，救援隊就能進場了！"
+            },
+            {
+              "speaker": "教官",
+              "text": "避開危險、掃描通道、安全降落——救援章節收尾！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "搜救隊長",
+              "text": "通道確認！廢墟救援任務圓滿結束。"
+            },
+            {
+              "speaker": "教官",
+              "text": "農場那邊也需要無人機幫忙，出發吧！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "掃描安全通道後，回起點降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 0,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 0
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "求救信號 A",
+              "x": 1,
+              "z": 2
+            },
+            {
+              "type": "scan",
+              "label": "求救信號 B",
+              "x": 5,
+              "z": -3
+            },
+            {
+              "type": "hazard",
+              "label": "倒塌區",
+              "x": -1,
+              "z": 0,
+              "model": "/assets/models/rubble.glb"
+            },
+            {
+              "type": "npc",
+              "label": "倉庫巡邏員",
+              "role": "worker",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 28,
+            "battery": 40
+          },
+          "concept": "composite",
+          "conceptLabel": "綜合任務",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "先完成所有掃描點。",
+            "避開瓦礫危險區。",
+            "最後返回救援基地並降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "control_if",
+              "hint": "用條件判斷避開危險區"
+            },
+            {
+              "block": "action_land",
+              "hint": "返回基地後降落"
+            }
+          ],
+          "storyBeat": 8,
+          "storyTitle": "安全通道"
+        }
+      ]
+    },
+    {
+      "id": "farm",
+      "title": "農田巡檢",
+      "icon": "🌾",
+      "theme": "farm",
+      "introDialogue": [
+        {
+          "speaker": "農場主人",
+          "text": "作物區需要空中巡檢，請避開風場並拍照記錄。"
+        }
+      ],
+      "endingDialogue": [
+        {
+          "speaker": "技術員",
+          "text": "巡檢完成，農田資料已更新。"
+        }
+      ],
+      "objects": [
+        {
+          "type": "crop",
+          "label": "玉米田",
+          "x": -2,
+          "z": 3,
+          "model": "/assets/models/crops.glb"
+        },
+        {
+          "type": "crop",
+          "label": "稻田",
+          "x": 1,
+          "z": -1,
+          "model": "/assets/models/crops.glb"
+        },
+        {
+          "type": "crop",
+          "label": "蔬菜田",
+          "x": 4,
+          "z": 1,
+          "model": "/assets/models/crops.glb"
+        },
+        {
+          "type": "canal",
+          "label": "灌溉渠 A",
+          "x": -1,
+          "z": -3
+        },
+        {
+          "type": "canal",
+          "label": "灌溉渠 B",
+          "x": 3,
+          "z": -3
+        },
+        {
+          "type": "windTurbine",
+          "label": "風向標",
+          "x": -4,
+          "z": -1
+        }
+      ],
+      "missions": [
+        {
+          "id": "farm-1",
+          "title": "作物區掃描",
+          "brief": "掃描兩個作物區，建立巡檢資料。",
+          "goal": "掃描玉米田和稻田。",
+          "dialogueStart": [
+            {
+              "speaker": "農場伯伯",
+              "text": "小航來啦！幫我掃描玉米田和稻田，看看作物狀況。"
+            },
+            {
+              "speaker": "教官",
+              "text": "農場風大，注意電量。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "農場伯伯",
+              "text": "作物長得真好，謝謝你！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "農場伯伯",
+              "text": "兩塊田都要掃描喔。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 2,
+            "dir": 0
+          },
+          "target": {
+            "x": 1,
+            "z": -1
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "玉米田",
+              "x": -2,
+              "z": 3
+            },
+            {
+              "type": "scan",
+              "label": "稻田",
+              "x": 1,
+              "z": -1
+            },
+            {
+              "type": "npc",
+              "label": "農場工人",
+              "role": "farmer",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true
+          },
+          "stars": {
+            "moves": 16,
+            "battery": 60
+          },
+          "concept": "sequence-scan",
+          "conceptLabel": "定點掃描",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "依序飛到玉米田與稻田。",
+            "每個作物區都要掃描一次。",
+            "注意風向，保持穩定路線。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_scan",
+              "hint": "玉米田與稻田都要掃描"
+            }
+          ],
+          "storyBeat": 9,
+          "storyTitle": "農場報到"
+        },
+        {
+          "id": "farm-2",
+          "title": "灌溉渠檢查",
+          "brief": "沿灌溉渠拍照記錄。",
+          "goal": "到達水渠旁並拍照。",
+          "dialogueStart": [
+            {
+              "speaker": "農場伯伯",
+              "text": "水渠可能有堵塞，飛過去掃描檢查點。"
+            },
+            {
+              "speaker": "教官",
+              "text": "強風區會多耗電，路線要規劃好。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "農場伯伯",
+              "text": "水渠正常！下一關風更大，要有心理準備。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "先到水渠檢查點掃描。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 2,
+            "dir": 0
+          },
+          "target": {
+            "x": 3,
+            "z": -3
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "水渠檢查點",
+              "x": 3,
+              "z": -3
+            },
+            {
+              "type": "npc",
+              "label": "巡田員",
+              "role": "farmer",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "photos": 1,
+            "atTarget": true
+          },
+          "stars": {
+            "moves": 20,
+            "battery": 50
+          },
+          "concept": "sequence-events",
+          "conceptLabel": "事件與記錄",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "先飛到水渠檢查點。",
+            "執行掃描確認位置。",
+            "使用「拍照記錄」留下水渠狀態。"
+          ],
+          "photoAt": "水渠檢查點",
+          "tutorialChecks": [
+            {
+              "block": "mission_scan",
+              "hint": "先掃描水渠檢查點"
+            },
+            {
+              "block": "mission_photo",
+              "hint": "在同一點拍照留底"
+            }
+          ],
+          "storyBeat": 10,
+          "storyTitle": "水渠檢查"
+        },
+        {
+          "id": "farm-3",
+          "title": "強風區避讓",
+          "brief": "避開強風區，完成全農田巡航。",
+          "goal": "掃描全部作物區並到達終點。",
+          "dialogueStart": [
+            {
+              "speaker": "教官",
+              "text": "今天風力發電站附近風特別大，掃描全部作物區。"
+            },
+            {
+              "speaker": "小航",
+              "text": "風好大……我會小心的！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "農場伯伯",
+              "text": "全部檢查完了！農場任務大功告成！"
+            },
+            {
+              "speaker": "教官",
+              "text": "物流倉庫邀請你去實習，學取貨送貨。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "強風區耗電快，掃描完所有作物區再降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 2,
+            "dir": 0
+          },
+          "target": {
+            "x": 5,
+            "z": -2
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "玉米田",
+              "x": -2,
+              "z": 3
+            },
+            {
+              "type": "scan",
+              "label": "稻田",
+              "x": 1,
+              "z": -1
+            },
+            {
+              "type": "scan",
+              "label": "蔬菜田",
+              "x": 4,
+              "z": 1
+            },
+            {
+              "type": "windTurbine",
+              "label": "強風區 A",
+              "x": -4,
+              "z": -1
+            },
+            {
+              "type": "windTurbine",
+              "label": "強風區 B",
+              "x": 2,
+              "z": 1
+            },
+            {
+              "type": "npc",
+              "label": "農場工人",
+              "role": "farmer",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            },
+            {
+              "type": "npc",
+              "label": "巡田員",
+              "role": "farmer",
+              "x": -7,
+              "z": -2,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -2
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "atTarget": true
+          },
+          "stars": {
+            "moves": 28,
+            "battery": 40
+          },
+          "concept": "loop-planning",
+          "conceptLabel": "路線規劃",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "規劃繞開強風區（風向標格）的路線，進入會額外耗電。",
+            "掃描全部作物區。",
+            "到達終點後安全降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_scan",
+              "hint": "掃描全部作物區"
+            },
+            {
+              "block": "control_repeat",
+              "hint": "可用重複積木減少積木數量"
+            }
+          ],
+          "storyBeat": 11,
+          "storyTitle": "強風巡檢"
+        }
+      ]
+    },
+    {
+      "id": "warehouse",
+      "title": "倉庫送貨",
+      "icon": "📦",
+      "theme": "warehouse",
+      "introDialogue": [
+        {
+          "speaker": "倉庫主管",
+          "text": "今天要測試無人機自動配送。注意貨架和電量。"
+        }
+      ],
+      "endingDialogue": [
+        {
+          "speaker": "系統 AI",
+          "text": "配送任務完成，物流路線已最佳化。"
+        }
+      ],
+      "objects": [
+        {
+          "type": "shelf",
+          "label": "貨架 A",
+          "x": 1,
+          "z": 2,
+          "model": "/assets/models/shelf.glb"
+        },
+        {
+          "type": "shelf",
+          "label": "貨架 B",
+          "x": 3,
+          "z": -1,
+          "model": "/assets/models/shelf.glb"
+        },
+        {
+          "type": "gate",
+          "label": "安全閘門",
+          "x": -1,
+          "z": 1
+        }
+      ],
+      "missions": [
+        {
+          "id": "warehouse-1",
+          "title": "取貨練習",
+          "brief": "到取貨區執行取貨。",
+          "goal": "完成取貨。",
+          "dialogueStart": [
+            {
+              "speaker": "倉庫主管",
+              "text": "歡迎來物流中心！先學取貨和放貨。"
+            },
+            {
+              "speaker": "教官",
+              "text": "到取貨區執行「取貨」，再到平台「放貨」。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "倉庫主管",
+              "text": "第一單完成！你已經會基本物流了。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "記得先取貨，再到送貨平台放貨。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": -3,
+            "dir": 0
+          },
+          "target": {
+            "x": -2,
+            "z": -3
+          },
+          "objects": [
+            {
+              "type": "pickup",
+              "label": "取貨區",
+              "x": -2,
+              "z": -3,
+              "model": "/assets/models/package.glb"
+            },
+            {
+              "type": "npc",
+              "label": "工地巡邏員",
+              "role": "worker",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "picked": true
+          },
+          "stars": {
+            "moves": 8,
+            "battery": 70
+          },
+          "concept": "state-pickup",
+          "conceptLabel": "狀態：取貨",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "起飛後移動到取貨區。",
+            "執行「取貨」積木。",
+            "確認 HUD 顯示已持有貨物。"
+          ],
+          "storyBeat": 12,
+          "storyTitle": "倉庫實習"
+        },
+        {
+          "id": "warehouse-2",
+          "title": "通道送貨",
+          "brief": "避開貨架，將貨物送到平台。",
+          "goal": "取貨並放貨。",
+          "dialogueStart": [
+            {
+              "speaker": "倉庫主管",
+              "text": "這趟路比較遠，電量可能不夠。"
+            },
+            {
+              "speaker": "教官",
+              "text": "用「電量低?」判斷，先去充電站補電。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "教官",
+              "text": "電量管理學會了！送貨任務越來越複雜。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "倉庫主管",
+              "text": "電量不足時找充電站，完成送貨再降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": -3,
+            "dir": 0
+          },
+          "target": {
+            "x": 5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "pickup",
+              "label": "取貨區",
+              "x": -2,
+              "z": -3,
+              "model": "/assets/models/package.glb"
+            },
+            {
+              "type": "dropoff",
+              "label": "送貨平台",
+              "x": 5,
+              "z": 3,
+              "model": "/assets/models/delivery-pad.glb"
+            },
+            {
+              "type": "hazard",
+              "label": "貨架阻擋",
+              "x": 3,
+              "z": 1,
+              "model": "/assets/models/shelf.glb"
+            },
+            {
+              "type": "npc",
+              "label": "救援志工",
+              "role": "worker",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "picked": true,
+            "delivered": true,
+            "atTarget": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 24,
+            "battery": 45
+          },
+          "concept": "state-delivery",
+          "conceptLabel": "狀態：送貨",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "先到取貨區取貨。",
+            "避開貨架，前往送貨平台。",
+            "到達後執行「放貨」並降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_pickup",
+              "hint": "先到取貨區執行「取貨」"
+            },
+            {
+              "block": "mission_dropoff",
+              "hint": "再移動到送貨平台「放貨」"
+            }
+          ],
+          "storyBeat": 13,
+          "storyTitle": "充電續航"
+        },
+        {
+          "id": "warehouse-3",
+          "title": "充電站規劃",
+          "brief": "先充電，再完成送貨。",
+          "goal": "取貨、充電、放貨並降落。",
+          "dialogueStart": [
+            {
+              "speaker": "倉庫主管",
+              "text": "最後一單：夜間配送，取貨、送貨、回基地。"
+            },
+            {
+              "speaker": "教官",
+              "text": "物流章節畢業關，加油！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "倉庫主管",
+              "text": "實習合格！你被選上太空見習計畫了！"
+            },
+            {
+              "speaker": "小航",
+              "text": "太空？！太棒了！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "完成取貨送貨，回起點安全降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": -3,
+            "dir": 0
+          },
+          "target": {
+            "x": 5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "pickup",
+              "label": "取貨區",
+              "x": -2,
+              "z": -3,
+              "model": "/assets/models/package.glb"
+            },
+            {
+              "type": "charger",
+              "label": "充電站",
+              "x": 0,
+              "z": 0,
+              "model": "/assets/models/charging-station.glb"
+            },
+            {
+              "type": "dropoff",
+              "label": "送貨平台",
+              "x": 5,
+              "z": 3,
+              "model": "/assets/models/delivery-pad.glb"
+            },
+            {
+              "type": "npc",
+              "label": "倉庫巡邏員",
+              "role": "worker",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            },
+            {
+              "type": "npc",
+              "label": "工地巡邏員",
+              "role": "worker",
+              "x": -7,
+              "z": -2,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -2
+                }
+              ]
+            }
+          ],
+          "success": {
+            "picked": true,
+            "delivered": true,
+            "atTarget": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 28,
+            "battery": 55
+          },
+          "concept": "state-battery",
+          "conceptLabel": "狀態：電量管理",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "取貨後注意電量。",
+            "電量不足時先去充電站。",
+            "充電後再送貨並降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_battery_low",
+              "hint": "電量低時用「電量低?」判斷"
+            },
+            {
+              "block": "mission_charge",
+              "hint": "前往充電站執行「充電」"
+            },
+            {
+              "block": "control_if",
+              "hint": "用「如果」組合取貨與充電流程"
+            }
+          ],
+          "storyBeat": 14,
+          "storyTitle": "夜間配送"
+        }
+      ]
+    },
+    {
+      "id": "space",
+      "title": "太空基地探索",
+      "icon": "🪐",
+      "theme": "space",
+      "introDialogue": [
+        {
+          "speaker": "基地 AI",
+          "text": "月面基地外圍需要巡檢。請避開隕石並收集晶體。"
+        }
+      ],
+      "endingDialogue": [
+        {
+          "speaker": "太空任務指揮官",
+          "text": "探索資料完整，基地能源安全。"
+        }
+      ],
+      "objects": [
+        {
+          "type": "base",
+          "label": "月面基地",
+          "x": -5,
+          "z": 5,
+          "model": "/assets/models/space-base.glb"
+        },
+        {
+          "type": "asteroid",
+          "label": "隕石 A",
+          "x": 2,
+          "z": 1,
+          "model": "/assets/models/asteroid.glb"
+        },
+        {
+          "type": "asteroid",
+          "label": "隕石 B",
+          "x": -6,
+          "z": -1,
+          "model": "/assets/models/asteroid.glb"
+        }
+      ],
+      "missions": [
+        {
+          "id": "space-1",
+          "title": "基地外牆掃描",
+          "brief": "掃描基地外牆狀態。",
+          "goal": "完成基地外牆掃描。",
+          "dialogueStart": [
+            {
+              "speaker": "基地 AI",
+              "text": "歡迎來到月球基地，見習飛手小航。"
+            },
+            {
+              "speaker": "教官",
+              "text": "深空環境不同，先掃描基地外牆。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "基地 AI",
+              "text": "外牆狀態正常，可進入下一階段探索。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "基地 AI",
+              "text": "請到掃描點執行掃描任務。"
+            }
+          ],
+          "start": {
+            "x": -4,
+            "z": 4,
+            "dir": 0
+          },
+          "target": {
+            "x": 2,
+            "z": -4
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "基地外牆掃描點",
+              "x": 2,
+              "z": -4
+            },
+            {
+              "type": "npc",
+              "label": "火山觀測員",
+              "role": "scientist",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true
+          },
+          "stars": {
+            "moves": 16,
+            "battery": 60
+          },
+          "concept": "sequence",
+          "conceptLabel": "順序執行",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "起飛後前往基地外牆掃描點。",
+            "到達後執行掃描。",
+            "確認外牆沒有裂縫。"
+          ],
+          "storyBeat": 15,
+          "storyTitle": "月球基地"
+        },
+        {
+          "id": "space-2",
+          "title": "能源晶體收集",
+          "brief": "收集兩個能量晶體。",
+          "goal": "收集晶體 A 和 B。",
+          "dialogueStart": [
+            {
+              "speaker": "基地 AI",
+              "text": "偵測到能量晶體，請收集並帶回。"
+            },
+            {
+              "speaker": "教官",
+              "text": "到晶體上方執行「收集能量」。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "基地 AI",
+              "text": "晶體已回收，能源補給完成。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "飛到晶體格子上再收集。"
+            }
+          ],
+          "start": {
+            "x": -4,
+            "z": 4,
+            "dir": 0
+          },
+          "target": {
+            "x": 5,
+            "z": -2
+          },
+          "objects": [
+            {
+              "type": "collect",
+              "label": "能量晶體 A",
+              "x": 3,
+              "z": 3,
+              "model": "/assets/models/crystal.glb"
+            },
+            {
+              "type": "collect",
+              "label": "能量晶體 B",
+              "x": 5,
+              "z": -2,
+              "model": "/assets/models/crystal.glb"
+            },
+            {
+              "type": "npc",
+              "label": "實驗室助理",
+              "role": "scientist",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "collected": 2
+          },
+          "stars": {
+            "moves": 22,
+            "battery": 50
+          },
+          "concept": "sequence-collect",
+          "conceptLabel": "收集任務",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "規劃路線飛到晶體 A 與 B。",
+            "到達晶體格後執行「收集能量」積木（不會自動收集）。",
+            "收集滿 2 個才算完成。"
+          ],
+          "autoCollect": false,
+          "tutorialChecks": [
+            {
+              "block": "mission_collect",
+              "hint": "飛到晶體上方後執行「收集能量」"
+            }
+          ],
+          "storyBeat": 16,
+          "storyTitle": "能量晶體"
+        },
+        {
+          "id": "space-3",
+          "title": "自動探索回航",
+          "brief": "避開隕石，掃描基地並回航。",
+          "goal": "掃描、收集並返回基地降落。",
+          "dialogueStart": [
+            {
+              "speaker": "基地 AI",
+              "text": "最後任務：自動探索隕石區，掃描並回航。"
+            },
+            {
+              "speaker": "教官",
+              "text": "用「重複直到任務完成」來寫探索迴圈。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "太空任務指揮官",
+              "text": "太空探索章節完成！表現優異。"
+            },
+            {
+              "speaker": "教官",
+              "text": "太棒了！從太空回來了。去海邊燈塔放鬆一下！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "基地 AI",
+              "text": "避開隕石，掃描基地並返回降落。"
+            }
+          ],
+          "start": {
+            "x": -4,
+            "z": 4,
+            "dir": 0
+          },
+          "target": {
+            "x": -4,
+            "z": 4
+          },
+          "objects": [
+            {
+              "type": "hazard",
+              "label": "隕石坑",
+              "x": -1,
+              "z": 1,
+              "model": "/assets/models/asteroid.glb"
+            },
+            {
+              "type": "collect",
+              "label": "能量晶體 A",
+              "x": 3,
+              "z": 3,
+              "model": "/assets/models/crystal.glb"
+            },
+            {
+              "type": "collect",
+              "label": "能量晶體 B",
+              "x": 5,
+              "z": -2,
+              "model": "/assets/models/crystal.glb"
+            },
+            {
+              "type": "scan",
+              "label": "基地外牆掃描點",
+              "x": 2,
+              "z": -4
+            },
+            {
+              "type": "npc",
+              "label": "研究員",
+              "role": "scientist",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            },
+            {
+              "type": "npc",
+              "label": "火山觀測員",
+              "role": "scientist",
+              "x": -7,
+              "z": -2,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -2
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "collected": 2,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 30,
+            "battery": 40
+          },
+          "concept": "repeat-until-done",
+          "conceptLabel": "重複直到完成",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "用「重複直到任務完成」建立自動探索，迴圈內需含掃描與收集。",
+            "若重複 20 次仍無進展會強制停止，請調整積木。",
+            "完成掃描與收集後回基地降落。"
+          ],
+          "autoCollect": false,
+          "maxRepeatSteps": 80,
+          "maxStagnantLoops": 20,
+          "tutorialChecks": [
+            {
+              "block": "mission_repeat_until_done",
+              "hint": "用「重複直到任務完成」建立探索迴圈"
+            },
+            {
+              "block": "mission_scan",
+              "hint": "迴圈內要包含掃描基地外牆"
+            },
+            {
+              "block": "mission_collect",
+              "hint": "迴圈內要包含收集晶體"
+            },
+            {
+              "block": "action_land",
+              "hint": "回基地後降落"
+            }
+          ],
+          "storyBeat": 17,
+          "storyTitle": "自動探索"
+        }
+      ]
+    },
+    {
+      "id": "coast",
+      "title": "海濱燈塔",
+      "icon": "🌊",
+      "theme": "coast",
+      "windDirection": {
+        "dx": 1,
+        "dz": 0
+      },
+      "introDialogue": [
+        {
+          "speaker": "教官",
+          "text": "歡迎來到海邊！風很大，先找到救生員叔叔說的位置。"
+        }
+      ],
+      "endingDialogue": [
+        {
+          "speaker": "教官",
+          "text": "海濱之旅結束了！但更大的任務才剛開始……"
+        },
+        {
+          "speaker": "Dr. 林",
+          "text": "火山活動異常，需要你這樣的飛手幫忙採樣。"
+        }
+      ],
+      "objects": [
+        {
+          "type": "lighthouse",
+          "label": "海濱燈塔",
+          "x": 5,
+          "z": 2
+        },
+        {
+          "type": "beacon",
+          "label": "救生圈",
+          "x": -3,
+          "z": -2
+        },
+        {
+          "type": "streetLight",
+          "label": "海濱路燈",
+          "x": -5,
+          "z": 0
+        }
+      ],
+      "missions": [
+        {
+          "id": "coast-1",
+          "title": "海邊報到",
+          "brief": "找到救生員旗幟並掃描。",
+          "goal": "掃描救生員旗幟並安全降落。",
+          "dialogueStart": [
+            {
+              "speaker": "教官",
+              "text": "任務完成後的獎勵旅行——海濱燈塔！先到海邊報到。"
+            },
+            {
+              "speaker": "救生員",
+              "text": "找到黃色旗幟，掃描一下跟我說你到了。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "救生員",
+              "text": "報到成功！海風很大，下一關要小心。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "找到救生員旗幟掃描，再安全降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": 2,
+            "z": 2
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "救生員旗幟",
+              "x": 2,
+              "z": 2
+            },
+            {
+              "type": "npc",
+              "label": "海岸巡邏員",
+              "role": "lifeguard",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "atTarget": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 14,
+            "battery": 55
+          },
+          "concept": "sequence-scan",
+          "conceptLabel": "海邊掃描",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "先起飛，往黃色旗幟方向飛。",
+            "到達後執行「掃描任務點」。",
+            "掃描完畢後降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "action_takeoff",
+              "hint": "先加入「起飛」"
+            },
+            {
+              "block": "mission_scan",
+              "hint": "到旗幟格執行「掃描任務點」"
+            },
+            {
+              "block": "action_land",
+              "hint": "最後加入「降落」"
+            }
+          ],
+          "storyBeat": 18,
+          "storyTitle": "海邊報到"
+        },
+        {
+          "id": "coast-2",
+          "title": "風箏在哪裡",
+          "brief": "避開浪花，順著海風去找風箏。",
+          "goal": "掃描風箏位置。",
+          "dialogueStart": [
+            {
+              "speaker": "救生員",
+              "text": "有小孩的風箏掉在岸邊了，幫忙找到並掃描！"
+            },
+            {
+              "speaker": "教官",
+              "text": "避開浪花危險區，順風飛行更省電。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "救生員",
+              "text": "找到了！最後一關——燈塔留念照！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "避開浪花，到風箏格掃描。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 2,
+            "dir": 0
+          },
+          "target": {
+            "x": 5,
+            "z": -2
+          },
+          "objects": [
+            {
+              "type": "hazard",
+              "label": "浪花區",
+              "x": 0,
+              "z": 0
+            },
+            {
+              "type": "hazard",
+              "label": "大浪",
+              "x": -1,
+              "z": 1
+            },
+            {
+              "type": "breeze",
+              "label": "順風帶 A",
+              "x": 1,
+              "z": 0,
+              "windDir": {
+                "dx": 1,
+                "dz": 0
+              }
+            },
+            {
+              "type": "breeze",
+              "label": "順風帶 B",
+              "x": 2,
+              "z": -1,
+              "windDir": {
+                "dx": 1,
+                "dz": 0
+              }
+            },
+            {
+              "type": "breeze",
+              "label": "順風帶 C",
+              "x": 3,
+              "z": -1,
+              "windDir": {
+                "dx": 1,
+                "dz": 0
+              }
+            },
+            {
+              "type": "scan",
+              "label": "風箏位置",
+              "x": 5,
+              "z": -2
+            },
+            {
+              "type": "npc",
+              "label": "海灘救生員",
+              "role": "lifeguard",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "atTarget": true
+          },
+          "stars": {
+            "moves": 22,
+            "battery": 45
+          },
+          "concept": "if-sensor",
+          "conceptLabel": "海風與避險",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "用「如果」判斷前方有沒有浪花。",
+            "有危險就轉向繞路，安全時再前進。",
+            "順風格飛行更省電，到達後掃描風箏。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "control_if",
+              "hint": "加入「如果」判斷前方危險"
+            },
+            {
+              "block": "mission_danger_ahead",
+              "hint": "使用「前方有危險?」積木"
+            },
+            {
+              "block": "mission_scan",
+              "hint": "到風箏格執行掃描"
+            }
+          ],
+          "storyBeat": 19,
+          "storyTitle": "風箏在哪"
+        },
+        {
+          "id": "coast-3",
+          "title": "燈塔留念照",
+          "brief": "掃描燈塔、拍照留念，回起點降落。",
+          "goal": "掃描燈塔、拍照並回起點降落。",
+          "weatherOverride": "sunset",
+          "photoAt": "燈塔掃描點",
+          "dialogueStart": [
+            {
+              "speaker": "教官",
+              "text": "掃描燈塔，拍一張留念照，再安全降落。"
+            },
+            {
+              "speaker": "小航",
+              "text": "海邊任務好開心！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "教官",
+              "text": "海濱任務完成！燈塔留念照拍得真好。"
+            },
+            {
+              "speaker": "Dr. 林",
+              "text": "小航，我是首席科學家林博士。火山監測站需要支援，你能來嗎？"
+            },
+            {
+              "speaker": "小航",
+              "text": "火山？！我馬上出發！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "掃描燈塔、拍照，最後回起點降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "燈塔掃描點",
+              "x": 5,
+              "z": 2
+            },
+            {
+              "type": "npc",
+              "label": "海岸巡邏員",
+              "role": "lifeguard",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "photos": 1,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 24,
+            "battery": 50
+          },
+          "concept": "composite",
+          "conceptLabel": "海濱綜合任務",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "飛到燈塔旁邊的掃描點。",
+            "掃描後在同一格「拍照記錄」。",
+            "飛回起點並降落，完成海濱任務！"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_scan",
+              "hint": "到燈塔格執行掃描"
+            },
+            {
+              "block": "mission_photo",
+              "hint": "掃描後在同一格拍照"
+            },
+            {
+              "block": "action_land",
+              "hint": "回起點後降落"
+            }
+          ],
+          "storyBeat": 20,
+          "storyTitle": "燈塔留念"
+        }
+      ]
+    },
+    {
+      "id": "volcano",
+      "title": "火山監測",
+      "icon": "🌋",
+      "theme": "volcano",
+      "introDialogue": [
+        {
+          "speaker": "Dr. 林",
+          "text": "歡迎來到火山監測站！這裡溫度很高，先熟悉設備。"
+        },
+        {
+          "speaker": "教官",
+          "text": "新積木「採集樣本」和「前方高溫?」會在這章登場。"
+        }
+      ],
+      "endingDialogue": [
+        {
+          "speaker": "Dr. 林",
+          "text": "樣本和數據都齊了！快送回實驗室分析。"
+        },
+        {
+          "speaker": "教官",
+          "text": "火山章節通關，下一站——科研實驗室！"
+        }
+      ],
+      "objects": [
+        {
+          "type": "volcano",
+          "label": "火山主峰",
+          "x": 5,
+          "z": -4
+        },
+        {
+          "type": "rubble",
+          "label": "火山碎石A",
+          "x": 1,
+          "z": 2
+        },
+        {
+          "type": "rubble",
+          "label": "火山碎石B",
+          "x": -3,
+          "z": -2
+        },
+        {
+          "type": "heat",
+          "label": "地熱噴口",
+          "x": 0,
+          "z": -2
+        },
+        {
+          "type": "lava",
+          "label": "熔岩溪",
+          "x": 3,
+          "z": 1
+        },
+        {
+          "type": "beacon",
+          "label": "監測營地",
+          "x": -4,
+          "z": 2
+        },
+        {
+          "type": "windTurbine",
+          "label": "氣象塔",
+          "x": -6,
+          "z": 0
+        },
+        {
+          "type": "streetLight",
+          "label": "警示燈A",
+          "x": -2,
+          "z": -1
+        },
+        {
+          "type": "streetLight",
+          "label": "警示燈B",
+          "x": 2,
+          "z": -3
+        },
+        {
+          "type": "hazard",
+          "label": "落石區",
+          "x": -1,
+          "z": 3
+        }
+      ],
+      "missions": [
+        {
+          "id": "volcano-1",
+          "title": "營地報到",
+          "brief": "掃描地震儀並安全降落。",
+          "goal": "掃描地震儀並回起點降落。",
+          "storyBeat": 21,
+          "storyTitle": "火山腳下",
+          "dialogueStart": [
+            {
+              "speaker": "Dr. 林",
+              "text": "監測營地到了！先掃描地震儀，確認設備正常。"
+            },
+            {
+              "speaker": "教官",
+              "text": "火山灰會影響視線，慢慢飛、穩穩掃描。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "Dr. 林",
+              "text": "地震儀數據正常。下一關要進入高溫區採樣！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "Dr. 林",
+              "text": "到地震儀掃描點執行掃描，再回起點降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "地震儀",
+              "x": 2,
+              "z": 0
+            },
+            {
+              "type": "heat",
+              "label": "熱氣警示A",
+              "x": 0,
+              "z": 2
+            },
+            {
+              "type": "heat",
+              "label": "熱氣警示B",
+              "x": -1,
+              "z": 1
+            },
+            {
+              "type": "rubble",
+              "label": "觀測碎石",
+              "x": 1,
+              "z": 1
+            },
+            {
+              "type": "rubble",
+              "label": "火山渣堆",
+              "x": -2,
+              "z": 0
+            },
+            {
+              "type": "heat",
+              "label": "裂縫熱氣",
+              "x": 0,
+              "z": 1
+            },
+            {
+              "type": "npc",
+              "label": "火山觀測員",
+              "role": "scientist",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 22,
+            "battery": 50
+          },
+          "concept": "sequence-scan",
+          "conceptLabel": "火山掃描",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "起飛後飛到地震儀。",
+            "執行「掃描任務點」。",
+            "回起點降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_scan",
+              "hint": "到地震儀格執行掃描"
+            }
+          ]
+        },
+        {
+          "id": "volcano-2",
+          "title": "熱氣採樣",
+          "brief": "避開岩漿，採集兩處氣體樣本。",
+          "goal": "採集全部樣本並安全降落。",
+          "storyBeat": 22,
+          "storyTitle": "高溫區探險",
+          "dialogueStart": [
+            {
+              "speaker": "Dr. 林",
+              "text": "火山口附近有高溫區和岩漿！用「前方高溫?」判斷繞路。"
+            },
+            {
+              "speaker": "教官",
+              "text": "到綠色採樣點執行「採集樣本」，兩處都要採。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "Dr. 林",
+              "text": "樣本採集完成！最後把數據回報到山頂終端。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "避開岩漿和高溫區，採集兩份樣本後降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "lava",
+              "label": "岩漿池A",
+              "x": 0,
+              "z": 0
+            },
+            {
+              "type": "lava",
+              "label": "岩漿池B",
+              "x": 1,
+              "z": -1
+            },
+            {
+              "type": "lava",
+              "label": "岩漿池C",
+              "x": 2,
+              "z": -2
+            },
+            {
+              "type": "heat",
+              "label": "熱氣區A",
+              "x": 2,
+              "z": 1
+            },
+            {
+              "type": "heat",
+              "label": "熱氣區B",
+              "x": 3,
+              "z": 0
+            },
+            {
+              "type": "heat",
+              "label": "熱氣區C",
+              "x": 1,
+              "z": 2
+            },
+            {
+              "type": "hazard",
+              "label": "落石帶A",
+              "x": -2,
+              "z": 0
+            },
+            {
+              "type": "hazard",
+              "label": "落石帶B",
+              "x": 0,
+              "z": -1
+            },
+            {
+              "type": "rubble",
+              "label": "火山渣A",
+              "x": -3,
+              "z": 2
+            },
+            {
+              "type": "rubble",
+              "label": "火山渣B",
+              "x": 3,
+              "z": 2
+            },
+            {
+              "type": "sample",
+              "label": "氣體採樣A",
+              "x": -1,
+              "z": 1
+            },
+            {
+              "type": "sample",
+              "label": "氣體採樣B",
+              "x": 4,
+              "z": 2
+            },
+            {
+              "type": "npc",
+              "label": "實驗室助理",
+              "role": "scientist",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            },
+            {
+              "type": "npc",
+              "label": "研究員",
+              "role": "scientist",
+              "x": -7,
+              "z": -2,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -2
+                }
+              ]
+            }
+          ],
+          "success": {
+            "samples": 2,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 32,
+            "battery": 40
+          },
+          "concept": "if-heat",
+          "conceptLabel": "高溫感測採樣",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "用「如果」+「前方高溫?」避開熱區。",
+            "到採樣點執行「採集樣本」。",
+            "兩處都採完後回起點降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_heat_ahead",
+              "hint": "加入「前方高溫?」判斷"
+            },
+            {
+              "block": "mission_sample",
+              "hint": "到採樣點執行採集樣本"
+            }
+          ]
+        },
+        {
+          "id": "volcano-3",
+          "title": "山頂回報",
+          "brief": "到「觀測掃描點」掃描拍照，再到「山頂終端」回報並回航。",
+          "goal": "先到黃色光柱「觀測掃描點」掃描並拍照，再到藍色光柱「山頂終端」回報數據，回起點降落。",
+          "storyBeat": 23,
+          "storyTitle": "山頂數據",
+          "photoAt": "觀測掃描點",
+          "dialogueStart": [
+            {
+              "speaker": "Dr. 林",
+              "text": "先到黃色光柱「觀測掃描點」掃描並拍照，再到藍色光柱「山頂終端」執行「回報數據」。"
+            },
+            {
+              "speaker": "教官",
+              "text": "這是火山章最後一關：掃描 → 拍照 → 回報 → 回航降落。避開岩漿與巡邏人員！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "Dr. 林",
+              "text": "數據已收到！樣本請立刻送往科研實驗室。"
+            },
+            {
+              "speaker": "教官",
+              "text": "火山任務圓滿結束，實驗室在等你！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "Dr. 林",
+              "text": "請完成：①掃描「觀測掃描點」②在該處拍照 ③到「山頂終端」回報 ④回起點降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "觀測掃描點",
+              "x": 3,
+              "z": -2
+            },
+            {
+              "type": "report",
+              "label": "山頂終端",
+              "x": 5,
+              "z": -1
+            },
+            {
+              "type": "lava",
+              "label": "岩漿池",
+              "x": 1,
+              "z": -1
+            },
+            {
+              "type": "lava",
+              "label": "熔岩帶",
+              "x": 2,
+              "z": 0
+            },
+            {
+              "type": "heat",
+              "label": "高溫區A",
+              "x": 0,
+              "z": -2
+            },
+            {
+              "type": "heat",
+              "label": "高溫區B",
+              "x": 4,
+              "z": 0
+            },
+            {
+              "type": "hazard",
+              "label": "崩塌區",
+              "x": 0,
+              "z": 0
+            },
+            {
+              "type": "rubble",
+              "label": "山頂碎石",
+              "x": 2,
+              "z": -3
+            },
+            {
+              "type": "windTurbine",
+              "label": "觀測塔",
+              "x": 4,
+              "z": -3
+            },
+            {
+              "type": "npc",
+              "label": "研究員",
+              "role": "scientist",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            },
+            {
+              "type": "npc",
+              "label": "火山觀測員",
+              "role": "scientist",
+              "x": -7,
+              "z": -2,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -2
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "photos": 1,
+            "reports": 1,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 30,
+            "battery": 45
+          },
+          "concept": "sequence-report",
+          "conceptLabel": "數據回報",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "到黃色光柱「觀測掃描點」掃描並拍照。",
+            "到藍色光柱「山頂終端」執行「回報數據」。",
+            "避開岩漿與行人，回起點降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_report",
+              "hint": "到終端執行回報數據"
+            },
+            {
+              "block": "mission_photo",
+              "hint": "在觀測點拍照"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lab",
+      "title": "科研實驗室",
+      "icon": "🔬",
+      "theme": "lab",
+      "introDialogue": [
+        {
+          "speaker": "Dr. 林",
+          "text": "樣本送到了！歡迎來到科研實驗室，這裡是終極考核場。"
+        },
+        {
+          "speaker": "教官",
+          "text": "取貨、放貨、回報數據——全部用上！"
+        }
+      ],
+      "endingDialogue": [
+        {
+          "speaker": "Dr. 林",
+          "text": "所有數據驗證通過！你通過了科研實驗室終極考核。"
+        },
+        {
+          "speaker": "教官",
+          "text": "恭喜你，小航！正式畢業，成為小小飛行員！"
+        }
+      ],
+      "objects": [
+        {
+          "type": "gate",
+          "label": "第一道閘門",
+          "x": -1,
+          "z": 2
+        },
+        {
+          "type": "gate",
+          "label": "安全閘門",
+          "x": 3,
+          "z": -2
+        },
+        {
+          "type": "labBench",
+          "label": "實驗台A",
+          "x": -3,
+          "z": 0
+        },
+        {
+          "type": "labBench",
+          "label": "實驗台B",
+          "x": 3,
+          "z": 1
+        },
+        {
+          "type": "labBench",
+          "label": "實驗台C",
+          "x": 1,
+          "z": -3
+        },
+        {
+          "type": "specimen",
+          "label": "標本櫃A",
+          "x": 0,
+          "z": -2
+        },
+        {
+          "type": "specimen",
+          "label": "標本櫃B",
+          "x": -5,
+          "z": -1
+        },
+        {
+          "type": "shelf",
+          "label": "試劑架A",
+          "x": -4,
+          "z": -1
+        },
+        {
+          "type": "shelf",
+          "label": "試劑架B",
+          "x": 4,
+          "z": -2
+        },
+        {
+          "type": "charger",
+          "label": "緊急充電站",
+          "x": -3,
+          "z": 3
+        },
+        {
+          "type": "hazard",
+          "label": "汙染區A",
+          "x": 1,
+          "z": 0
+        },
+        {
+          "type": "hazard",
+          "label": "汙染區B",
+          "x": 2,
+          "z": 2
+        },
+        {
+          "type": "streetLight",
+          "label": "走廊燈A",
+          "x": -2,
+          "z": -3
+        },
+        {
+          "type": "streetLight",
+          "label": "走廊燈B",
+          "x": 5,
+          "z": 0
+        }
+      ],
+      "missions": [
+        {
+          "id": "lab-1",
+          "title": "淨化通道",
+          "brief": "先掃描黃色光柱「淨化入口」，再到藍色光柱「登記終端」回報。",
+          "goal": "先到「淨化入口」掃描，再到「登記終端」回報數據，最後回起點降落。",
+          "storyBeat": 24,
+          "storyTitle": "實驗室大門",
+          "dialogueStart": [
+            {
+              "speaker": "Dr. 林",
+              "text": "地圖上有兩個發光標記：黃色是「淨化入口」要先掃描，藍色是「登記終端」要回報數據。"
+            },
+            {
+              "speaker": "教官",
+              "text": "順序：掃描任務點 → 到登記終端執行「回報數據」→ 回起點降落。注意避開巡邏的行人！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "Dr. 林",
+              "text": "登記完成！下一關要運送火山樣本。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "Dr. 林",
+              "text": "請依序完成：①掃描「淨化入口」②到藍色光柱「登記終端」回報 ③回起點降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "scan",
+              "label": "淨化入口",
+              "x": 0,
+              "z": 0
+            },
+            {
+              "type": "report",
+              "label": "登記終端",
+              "x": 2,
+              "z": 1
+            },
+            {
+              "type": "hazard",
+              "label": "未淨化區A",
+              "x": 1,
+              "z": 2
+            },
+            {
+              "type": "hazard",
+              "label": "未淨化區B",
+              "x": -1,
+              "z": 0
+            },
+            {
+              "type": "gate",
+              "label": "氣閘門",
+              "x": 0,
+              "z": 1
+            },
+            {
+              "type": "shelf",
+              "label": "消毒架",
+              "x": -2,
+              "z": 1
+            },
+            {
+              "type": "npc",
+              "label": "實驗室助理",
+              "role": "scientist",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "reports": 1,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 22,
+            "battery": 55
+          },
+          "concept": "sequence-report",
+          "conceptLabel": "實驗室登記",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "飛到黃色光柱「淨化入口」，執行「掃描任務點」。",
+            "再到藍色光柱「登記終端」，執行「回報數據」。",
+            "避開巡邏行人，回起點後降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_report",
+              "hint": "到藍色光柱「登記終端」執行回報數據"
+            }
+          ]
+        },
+        {
+          "id": "lab-2",
+          "title": "標本快遞",
+          "brief": "依序到橙色「標本櫃」取貨、紫色「分析平台」放貨、藍色「分析終端」回報。",
+          "goal": "先到「標本櫃」取貨，再到「分析平台」放貨，最後到「分析終端」回報數據並回起點降落。",
+          "storyBeat": 25,
+          "storyTitle": "樣本運送",
+          "dialogueStart": [
+            {
+              "speaker": "Dr. 林",
+              "text": "三個發光標記要依序完成：橙色標本櫃取貨 → 紫色分析平台放貨 → 藍色分析終端回報。"
+            },
+            {
+              "speaker": "教官",
+              "text": "順序不能顛倒：取貨 → 放貨 → 回報數據。路上有巡邏助理，注意避讓。"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "Dr. 林",
+              "text": "分析啟動！最後一關是終極綜合考核。"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "依序完成：①橙色「標本櫃」取貨 ②紫色「分析平台」放貨 ③藍色「分析終端」回報，最後回起點降落。"
+            }
+          ],
+          "start": {
+            "x": -5,
+            "z": 3,
+            "dir": 0
+          },
+          "target": {
+            "x": -5,
+            "z": 3
+          },
+          "objects": [
+            {
+              "type": "pickup",
+              "label": "標本櫃",
+              "x": -2,
+              "z": 0
+            },
+            {
+              "type": "dropoff",
+              "label": "分析平台",
+              "x": 3,
+              "z": -1
+            },
+            {
+              "type": "report",
+              "label": "分析終端",
+              "x": 4,
+              "z": 2
+            },
+            {
+              "type": "hazard",
+              "label": "汙染走廊",
+              "x": 0,
+              "z": 0
+            },
+            {
+              "type": "hazard",
+              "label": "限制區",
+              "x": 1,
+              "z": -1
+            },
+            {
+              "type": "gate",
+              "label": "樣本通道",
+              "x": 0,
+              "z": -2
+            },
+            {
+              "type": "labBench",
+              "label": "暫存台",
+              "x": 2,
+              "z": 0
+            },
+            {
+              "type": "shelf",
+              "label": "試劑架",
+              "x": -3,
+              "z": -1
+            },
+            {
+              "type": "npc",
+              "label": "實驗室助理",
+              "role": "scientist",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            },
+            {
+              "type": "npc",
+              "label": "研究員",
+              "role": "scientist",
+              "x": -7,
+              "z": -2,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -2
+                }
+              ]
+            }
+          ],
+          "success": {
+            "delivered": true,
+            "reports": 1,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 28,
+            "battery": 45
+          },
+          "concept": "state-delivery",
+          "conceptLabel": "標本運送",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "到橙色光柱「標本櫃」執行「取貨」。",
+            "到紫色光柱「分析平台」執行「放貨」。",
+            "到藍色光柱「分析終端」執行「回報數據」，回起點降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_pickup",
+              "hint": "到標本櫃取貨"
+            },
+            {
+              "block": "mission_dropoff",
+              "hint": "到分析平台放貨"
+            },
+            {
+              "block": "mission_report",
+              "hint": "到終端回報數據"
+            }
+          ]
+        },
+        {
+          "id": "lab-3",
+          "title": "終極考核",
+          "brief": "自動完成掃描、採樣、回報並回航。",
+          "goal": "掃描、採樣、回報並回基地降落。",
+          "storyBeat": 26,
+          "storyTitle": "畢業考核",
+          "dialogueStart": [
+            {
+              "speaker": "教官",
+              "text": "終極考核！用「重複直到任務完成」自動探索所有目標。"
+            },
+            {
+              "speaker": "Dr. 林",
+              "text": "掃描、採樣、回報全部完成，你就畢業了！"
+            },
+            {
+              "speaker": "小航",
+              "text": "這是最後一關……我會全力以赴！"
+            }
+          ],
+          "dialogueSuccess": [
+            {
+              "speaker": "Dr. 林",
+              "text": "完美！所有科研數據驗證通過。"
+            },
+            {
+              "speaker": "教官",
+              "text": "小航，從校園到火山再到實驗室——你畢業了！"
+            }
+          ],
+          "dialogueFail": [
+            {
+              "speaker": "教官",
+              "text": "掃描、採樣、回報都要完成，最後回基地降落。"
+            }
+          ],
+          "start": {
+            "x": -4,
+            "z": 4,
+            "dir": 0
+          },
+          "target": {
+            "x": -4,
+            "z": 4
+          },
+          "autoCollect": false,
+          "maxRepeatSteps": 140,
+          "maxStagnantLoops": 28,
+          "objects": [
+            {
+              "type": "scan",
+              "label": "考核掃描點",
+              "x": 2,
+              "z": 0
+            },
+            {
+              "type": "sample",
+              "label": "考核樣本",
+              "x": -1,
+              "z": -2
+            },
+            {
+              "type": "report",
+              "label": "畢業終端",
+              "x": 5,
+              "z": 1
+            },
+            {
+              "type": "hazard",
+              "label": "禁區A",
+              "x": 0,
+              "z": 2
+            },
+            {
+              "type": "hazard",
+              "label": "禁區B",
+              "x": 1,
+              "z": 1
+            },
+            {
+              "type": "hazard",
+              "label": "禁區C",
+              "x": 0,
+              "z": 0
+            },
+            {
+              "type": "hazard",
+              "label": "禁區D",
+              "x": 1,
+              "z": 3
+            },
+            {
+              "type": "gate",
+              "label": "考核閘門",
+              "x": -2,
+              "z": 1
+            },
+            {
+              "type": "labBench",
+              "label": "緩衝實驗台",
+              "x": 3,
+              "z": 2
+            },
+            {
+              "type": "charger",
+              "label": "備用電源",
+              "x": -4,
+              "z": 2
+            },
+            {
+              "type": "shelf",
+              "label": "器材架",
+              "x": 4,
+              "z": -1
+            },
+            {
+              "type": "npc",
+              "label": "研究員",
+              "role": "scientist",
+              "x": -7,
+              "z": -6,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -6
+                },
+                {
+                  "x": -6,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -5
+                },
+                {
+                  "x": -7,
+                  "z": -6
+                }
+              ]
+            },
+            {
+              "type": "npc",
+              "label": "火山觀測員",
+              "role": "scientist",
+              "x": -7,
+              "z": -2,
+              "patrol": [
+                {
+                  "x": -7,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -2
+                },
+                {
+                  "x": -6,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -1
+                },
+                {
+                  "x": -7,
+                  "z": -2
+                }
+              ]
+            }
+          ],
+          "success": {
+            "scanAll": true,
+            "samples": 1,
+            "reports": 1,
+            "returnToBase": true,
+            "landed": true
+          },
+          "stars": {
+            "moves": 40,
+            "battery": 35
+          },
+          "concept": "composite",
+          "conceptLabel": "終極畢業考核",
+          "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
+          "hintSteps": [
+            "用「重複直到任務完成」包住探索邏輯。",
+            "在任務點依序掃描、採樣、回報。",
+            "避開禁區，完成後回基地降落。"
+          ],
+          "tutorialChecks": [
+            {
+              "block": "mission_repeat_until_done",
+              "hint": "使用重複直到任務完成"
+            },
+            {
+              "block": "mission_sample",
+              "hint": "到樣本點採集"
+            },
+            {
+              "block": "mission_report",
+              "hint": "到終端回報"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

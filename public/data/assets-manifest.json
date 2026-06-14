@@ -1,0 +1,98 @@
+{
+  "models": {
+    "schoolBuilding": {
+      "path": "/assets/models/school-building.glb",
+      "usedBy": ["campus"],
+      "fallback": "createSchoolBuilding"
+    },
+    "sportsField": {
+      "path": "/assets/models/sports-field.glb",
+      "usedBy": ["campus"],
+      "fallback": "createTrackField"
+    },
+    "tree": {
+      "path": "/assets/models/tree.glb",
+      "usedBy": ["campus"],
+      "fallback": "createTreeAsset"
+    },
+    "rescueTent": {
+      "path": "/assets/models/rescue-tent.glb",
+      "usedBy": ["rescue"],
+      "fallback": "createRescueTent"
+    },
+    "rubble": {
+      "path": "/assets/models/rubble.glb",
+      "usedBy": ["rescue"],
+      "fallback": "createRubble"
+    },
+    "crops": {
+      "path": "/assets/models/crops.glb",
+      "usedBy": ["farm"],
+      "fallback": "createCropField"
+    },
+    "windZone": {
+      "path": "/assets/models/wind-zone.glb",
+      "usedBy": ["farm"],
+      "fallback": "createWindTurbine"
+    },
+    "package": {
+      "path": "/assets/models/package.glb",
+      "usedBy": ["warehouse"],
+      "fallback": "createPackage"
+    },
+    "deliveryPad": {
+      "path": "/assets/models/delivery-pad.glb",
+      "usedBy": ["warehouse"],
+      "fallback": "createDeliveryPad"
+    },
+    "chargingStation": {
+      "path": "/assets/models/charging-station.glb",
+      "usedBy": ["warehouse"],
+      "fallback": "createChargingStation"
+    },
+    "shelf": {
+      "path": "/assets/models/shelf.glb",
+      "usedBy": ["warehouse"],
+      "fallback": "createWarehouseShelf"
+    },
+    "spaceBase": {
+      "path": "/assets/models/space-base.glb",
+      "usedBy": ["space"],
+      "fallback": "createMoonBase"
+    },
+    "asteroid": {
+      "path": "/assets/models/asteroid.glb",
+      "usedBy": ["space"],
+      "fallback": "createAsteroid"
+    },
+    "crystal": {
+      "path": "/assets/models/crystal.glb",
+      "usedBy": ["space"],
+      "fallback": "createEnergyCrystal"
+    }
+  },
+  "textures": {
+    "campusGround": "/assets/textures/campus-ground.jpg",
+    "rescueGround": "/assets/textures/rescue-ground.jpg",
+    "farmGround": "/assets/textures/farm-ground.jpg",
+    "warehouseFloor": "/assets/textures/warehouse-floor.jpg",
+    "moonSurface": "/assets/textures/moon-surface.jpg",
+    "water": "/assets/textures/water.jpg",
+    "metal": "/assets/textures/metal.jpg"
+  },
+  "audio": {
+    "missionStart": "/assets/audio/mission-start.mp3",
+    "missionSuccess": "/assets/audio/mission-success.mp3",
+    "missionFail": "/assets/audio/mission-fail.mp3",
+    "scan": "/assets/audio/scan.mp3",
+    "pickup": "/assets/audio/pickup.mp3",
+    "dropoff": "/assets/audio/dropoff.mp3",
+    "charge": "/assets/audio/charge.mp3",
+    "warning": "/assets/audio/warning.mp3",
+    "ambientCampus": "/assets/audio/ambient-campus.mp3",
+    "ambientRescue": "/assets/audio/ambient-rescue.mp3",
+    "ambientFarm": "/assets/audio/ambient-farm.mp3",
+    "ambientWarehouse": "/assets/audio/ambient-warehouse.mp3",
+    "ambientSpace": "/assets/audio/ambient-space.mp3"
+  }
+}
