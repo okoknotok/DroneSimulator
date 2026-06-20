@@ -14,6 +14,54 @@
       .map((item) => item.label);
   }
 
+  function isPhaseObjectiveDone(state, mission, objectiveKey, helpers) {
+    if (!objectiveKey) return true;
+    if (objectiveKey === 'photos') return state.photos >= (mission.success?.photos || 0);
+    if (objectiveKey === 'picked') return state.cargo || state.delivered;
+    if (objectiveKey === 'delivered') return state.delivered;
+    if (objectiveKey === 'return') return helpers.isAtMissionTarget();
+    if (objectiveKey === 'landed') return state.landed;
+    const [type, label] = objectiveKey.split(':');
+    if (type === 'scan') return state.scans.has(label);
+    if (type === 'report') return state.reports.has(label);
+    if (type === 'sample') return state.samples.has(label);
+    if (type === 'pickup') return state.cargo || state.delivered;
+    if (type === 'dropoff') return state.delivered;
+    return false;
+  }
+
+  function phaseRequirementsMet(state, phase) {
+    return (phase.requires || []).every((id) => state.phasesDone?.has(id));
+  }
+
+  function isPhaseComplete(state, mission, phase, helpers) {
+    if (!phaseRequirementsMet(state, phase)) return false;
+    return (phase.objectives || []).every((key) => isPhaseObjectiveDone(state, mission, key, helpers));
+  }
+
+  function getCurrentPhase(state, mission, helpers) {
+    if (!mission?.phases?.length) return null;
+    for (const phase of mission.phases) {
+      if (!phaseRequirementsMet(state, phase)) return phase;
+      if (!isPhaseComplete(state, mission, phase, helpers)) return phase;
+    }
+    return null;
+  }
+
+  function objectiveKeyForItem(item) {
+    if (!item?.type || !item.label) return null;
+    if (TASK_TYPES.includes(item.type)) return `${item.type}:${item.label}`;
+    return null;
+  }
+
+  function isObjectiveActive(state, mission, item, helpers) {
+    const phase = getCurrentPhase(state, mission, helpers);
+    if (!phase) return true;
+    const key = objectiveKeyForItem(item);
+    if (!key) return true;
+    return (phase.objectives || []).includes(key);
+  }
+
   function formatScanLabel(mission, state) {
     const total = getTaskObjects(mission, 'scan').length;
     const pending = getPendingLabels(mission, 'scan', state.scans);
@@ -43,6 +91,7 @@
 
   function getFailureReason(state, mission, helpers) {
     if (!mission) return '任務資料載入失敗，請重新選擇任務。';
+    if (state.hitTimeout) return `超過限時 ${mission.timeLimitSec} 秒！請精簡路線或減少重複步數。`;
     if (state.hitNpc) return '撞到移動中的行人！請觀察巡邏路線，規劃避讓後再飛。';
     if (state.hitHazard) return '無人機進入危險區或電量耗盡，請調整路線或加入充電步驟。';
 
@@ -112,7 +161,129 @@
     return '任務條件尚未全部達成，請對照下方目標清單調整積木。';
   }
 
+  function buildPhaseItems(state, mission, helpers) {
+    const phase = getCurrentPhase(state, mission, helpers);
+    if (!phase) return null;
+    const items = [];
+    (phase.objectives || []).forEach((key) => {
+      if (key.startsWith('scan:')) {
+        const label = key.slice(5);
+        items.push({ id: key, label: `掃描：「${label}」`, done: state.scans.has(label) });
+      } else if (key.startsWith('report:')) {
+        const label = key.slice(7);
+        items.push({ id: key, label: `到「${label}」回報數據`, done: state.reports.has(label) });
+      } else if (key.startsWith('sample:')) {
+        const label = key.slice(7);
+        items.push({ id: key, label: `到「${label}」採集樣本`, done: state.samples.has(label) });
+      } else if (key === 'photos') {
+        items.push({
+          id: 'photos',
+          label: `在「${mission.photoAt || '任務點'}」拍照（${state.photos}/${mission.success?.photos || 1}）`,
+          done: state.photos >= (mission.success?.photos || 0),
+        });
+      } else if (key === 'picked') {
+        const pickup = getTaskObjects(mission, 'pickup')[0];
+        items.push({
+          id: 'picked',
+          label: pickup ? `到「${pickup.label}」取貨` : '完成取貨',
+          done: state.cargo || state.delivered,
+        });
+      } else if (key === 'delivered') {
+        const drop = getTaskObjects(mission, 'dropoff')[0];
+        items.push({
+          id: 'delivered',
+          label: drop ? `到「${drop.label}」放貨` : '完成送貨',
+          done: state.delivered,
+        });
+      } else if (key === 'return') {
+        items.push({ id: 'return', label: '返回基地', done: helpers.isAtMissionTarget() });
+      } else if (key === 'landed') {
+        items.push({ id: 'landed', label: '安全降落', done: state.landed });
+      }
+    });
+    if (phase.title) {
+      items.unshift({ id: 'phase-title', label: `▶ ${phase.title}`, done: false, optional: true });
+    }
+    return items;
+  }
+
+  function getClosedGates(mission, state) {
+    return (mission?.objects || []).filter(
+      (item) => item.type === 'gate' && item.opensOn && item.opensOn !== 'always'
+        && item.closed !== false && !state.gatesOpen?.has(item.label),
+    );
+  }
+
+  function getGateHintText(gate, open = false) {
+    if (open) return '已開啟，可通過';
+    if (gate.hint) return gate.hint;
+    const opensOn = gate.opensOn;
+    if (opensOn?.startsWith('scan:')) return `掃描「${opensOn.slice(5)}」後開啟`;
+    if (opensOn === 'pickup') return '取貨後開啟';
+    if (opensOn?.startsWith('report:')) return `回報「${opensOn.slice(7)}」後開啟`;
+    if (opensOn === 'manual') return '到閘門前執行「開啟閘門」';
+    return '完成條件後開啟';
+  }
+
+  function formatGateLabel(gate, state) {
+    const open = state?.gatesOpen?.has(gate.label);
+    if (open) return `✅「${gate.label}」已開啟，可通過`;
+    return `🚧「${gate.label}」${getGateHintText(gate, false)}`;
+  }
+
+  function buildDefaultHintSteps(mission) {
+    const steps = [];
+    (mission?.phases || []).forEach((phase) => {
+      if (phase.title) steps.push(`下一步建議：${phase.title.replace(/^第.+階段：/, '')}`);
+    });
+    if (mission?.goal) steps.push(`提示：${mission.goal}`);
+    else if (mission?.brief) steps.push(`提示：${mission.brief}`);
+    return steps.length ? steps : ['對照目標清單，先完成尚未打勾的項目。'];
+  }
+
+  function getProgressiveHint(mission, failCount, state, helpers) {
+    if (failCount < 3) return null;
+    const custom = mission?.hintSteps;
+    const steps = custom?.length ? custom : buildDefaultHintSteps(mission);
+    const phase = getCurrentPhase(state, mission, helpers);
+    if (phase && !custom?.length) {
+      const pending = (phase.objectives || []).find((key) => !isPhaseObjectiveDone(state, mission, key, helpers));
+      if (pending) {
+        if (pending.startsWith('scan:')) return `下一步建議：先掃描「${pending.slice(5)}」`;
+        if (pending.startsWith('report:')) return `下一步建議：先到「${pending.slice(7)}」回報`;
+        if (pending.startsWith('sample:')) return `下一步建議：先採集「${pending.slice(7)}」`;
+        if (pending === 'picked') return '下一步建議：先到橙色取貨點取貨';
+        if (pending === 'delivered') return '下一步建議：再到紫色放貨點放貨';
+        if (pending === 'return') return '下一步建議：完成任務後回到起點';
+        if (pending === 'landed') return '下一步建議：在起點執行降落';
+      }
+    }
+    const idx = Math.min(failCount - 3, steps.length - 1);
+    return steps[idx];
+  }
+
   function buildObjectives(state, mission, helpers) {
+    const phaseItems = buildPhaseItems(state, mission, helpers);
+    if (phaseItems?.length) {
+      const firstPending = phaseItems.find((item) => !item.done && !item.optional);
+      const withNpc = [...phaseItems];
+      if ((mission.objects || []).some((o) => o.type === 'npc')) {
+        withNpc.push({ id: 'npc', label: '注意移動中的行人', done: false, optional: true });
+      }
+      const gates = getClosedGates(mission, state);
+      if (gates.length) {
+        gates.forEach((gate) => {
+          withNpc.push({ id: `gate-${gate.label}`, label: formatGateLabel(gate, state), done: false, optional: true });
+        });
+      } else if ((mission.objects || []).some((o) => o.type === 'gate' && o.opensOn)) {
+        withNpc.push({ id: 'gate-open', label: '✅ 通道閘門已開啟', done: true, optional: true });
+      }
+      return withNpc.map((item) => ({
+        ...item,
+        highlight: firstPending && item.id === firstPending.id,
+      }));
+    }
+
     const success = mission?.success || {};
     const scanTotal = helpers.countObjects('scan');
     const collectTotal = helpers.countObjects('collect');
@@ -206,6 +377,14 @@
         optional: true,
       });
     }
+    getClosedGates(mission, state).forEach((gate) => {
+      items.push({
+        id: `gate-${gate.label}`,
+        label: formatGateLabel(gate, state),
+        done: false,
+        optional: true,
+      });
+    });
 
     const firstPending = items.find((item) => !item.done && !item.optional);
     return items.map((item) => ({
@@ -215,6 +394,18 @@
   }
 
   function getNextPendingObjectiveLabel(state, mission, helpers) {
+    const phase = getCurrentPhase(state, mission, helpers);
+    if (phase) {
+      const pendingKey = (phase.objectives || []).find((key) => !isPhaseObjectiveDone(state, mission, key, helpers));
+      if (!pendingKey) return null;
+      if (pendingKey.startsWith('scan:')) return pendingKey.slice(5);
+      if (pendingKey.startsWith('report:')) return pendingKey.slice(7);
+      if (pendingKey.startsWith('sample:')) return pendingKey.slice(7);
+      if (pendingKey === 'photos') return mission.photoAt || getTaskObjects(mission, 'scan')[0]?.label || null;
+      if (pendingKey === 'picked') return getTaskObjects(mission, 'pickup')[0]?.label || null;
+      if (pendingKey === 'delivered') return getTaskObjects(mission, 'dropoff')[0]?.label || null;
+      return null;
+    }
     const items = buildObjectives(state, mission, helpers);
     const pending = items.find((item) => !item.done && !item.optional);
     if (!pending) return null;
@@ -247,5 +438,11 @@
     getNextPendingObjectiveLabel,
     renderObjectivesHtml,
     renderObjectiveChips,
+    getCurrentPhase,
+    isPhaseComplete,
+    isObjectiveActive,
+    isPhaseObjectiveDone,
+    getGateHintText,
+    getProgressiveHint,
   };
 }(window));

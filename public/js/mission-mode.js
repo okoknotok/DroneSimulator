@@ -38,6 +38,15 @@
   let objectivePulseObserver = null;
   let objectivePulseTime = 0;
   let npcActors = [];
+  let gateActors = [];
+  let patrolRouteMeshes = [];
+  let missionRunStart = 0;
+  let npcProximityWarning = '';
+  let patrolRoutesVisible = null;
+  let missionMenuPreviewActive = false;
+
+  const GATE_SIGN_COLOR = [1.0, 0.45, 0.15];
+  const GATE_SIGN_COLOR_OPEN = [0.2, 0.9, 0.4];
 
   const TASK_POINT_TYPES = ['scan', 'sample', 'report', 'pickup', 'dropoff', 'charger', 'collect'];
   const OBJECTIVE_COLORS = {
@@ -136,6 +145,27 @@
     npc: 0,
   };
 
+  /** 地形碰撞半徑（曼哈頓距離，0 = 僅中心格）— 與 3D 占地一致 */
+  const TERRAIN_COLLISION_FOOTPRINT = {
+    lava: 0,
+    hazard: 0,
+    heat: 0,
+    volcano: 0,
+    rubble: 0,
+    building: 1,
+    tree: 1,
+    windTurbine: 0,
+    gate: 0,
+  };
+
+  const TERRAIN_PRIORITY = {
+    lava: 5,
+    hazard: 5,
+    volcano: 4,
+    heat: 3,
+    rubble: 2,
+  };
+
   const OBJECT_NUDGE_PRIORITY = {
     base: 0,
     building: 1,
@@ -169,6 +199,10 @@
       photos: 0,
       hitHazard: false,
       hitNpc: false,
+      hitTimeout: false,
+      gatesOpen: new Set(),
+      phasesDone: new Set(),
+      elapsedSec: 0,
       delivered: false,
       moves: 0,
       log: [],
@@ -358,6 +392,44 @@
       },
     };
     }
+    if (!Blockly.Blocks.mission_gate_closed) {
+    Blockly.Blocks.mission_gate_closed = {
+      init() {
+        this.appendDummyInput().appendField('🚧 前方閘門關閉?');
+        this.setOutput(true, 'Boolean');
+        this.setColour('#5CB1D6');
+      },
+    };
+    Blockly.Blocks.mission_open_gate = {
+      init() {
+        this.appendDummyInput().appendField('🚪 開啟閘門');
+        this.setPreviousStatement(true, null);
+        this.setNextStatement(true, null);
+        this.setColour('#FFBF00');
+      },
+    };
+    Blockly.Blocks.mission_npc_ahead = {
+      init() {
+        this.appendDummyInput().appendField('🚶 前方有行人?');
+        this.setOutput(true, 'Boolean');
+        this.setColour('#5CB1D6');
+      },
+    };
+    Blockly.Blocks.mission_wind_ahead = {
+      init() {
+        this.appendDummyInput().appendField('💨 前方有風區?');
+        this.setOutput(true, 'Boolean');
+        this.setColour('#5CB1D6');
+      },
+    };
+    Blockly.Blocks.mission_strong_wind_ahead = {
+      init() {
+        this.appendDummyInput().appendField('🌪️ 前方逆風?');
+        this.setOutput(true, 'Boolean');
+        this.setColour('#5CB1D6');
+      },
+    };
+    }
   }
 
   async function enter(nextCtx) {
@@ -512,8 +584,31 @@
     if (types.includes('charger')) add(actions, 'mission_charge');
     if (types.some((type) => type === 'hazard' || type === 'lava')) add(sensors, 'mission_danger_ahead');
     if (types.some((type) => type === 'heat' || type === 'lava')) add(sensors, 'mission_heat_ahead');
+    if (types.some((type) => type === 'gate' && objs.some((o) => o.type === 'gate' && gateStartsClosed(o)))) {
+      add(sensors, 'mission_gate_closed');
+    }
+    if (types.includes('gate') && objs.some((o) => o.type === 'gate' && o.opensOn === 'manual')) {
+      add(actions, 'mission_open_gate');
+    }
+    if (types.includes('npc')) add(sensors, 'mission_npc_ahead');
+    if (types.some((type) => type === 'breeze' || type === 'windTurbine')) {
+      add(sensors, 'mission_wind_ahead');
+      add(sensors, 'mission_strong_wind_ahead');
+    }
+    const chapterTheme = currentChapter()?.theme;
+    if (chapterTheme === 'farm' || chapterTheme === 'coast') {
+      add(sensors, 'mission_wind_ahead');
+      add(sensors, 'mission_strong_wind_ahead');
+    }
     if (mission.maxRepeatSteps) add(actions, 'mission_repeat_until_done');
     return { actions, sensors };
+  }
+
+  function gateStartsClosed(item) {
+    if (!item || item.type !== 'gate') return false;
+    if (item.closed === false || item.opensOn === 'always') return false;
+    if (item.opensOn) return true;
+    return item.closed === true;
   }
 
   function renderCards() {
@@ -600,8 +695,6 @@
 
   function updateMenuProgressBadge() {
     const total = MissionProgress.getTotalProgress(chapters, progress);
-    const tag = document.querySelector('.mode-card.mission .feature-tag.mission-progress');
-    if (tag) tag.textContent = `🏁 ${total.completed}/${total.total}`;
     window.dispatchEvent(new CustomEvent('drone-mission-progress', { detail: total }));
   }
 
@@ -621,6 +714,7 @@
     currentChapterIndex = Math.max(0, Math.min(chapters.length - 1, chapterIndex));
     currentMissionIndex = Math.max(0, Math.min(currentChapter().missions.length - 1, missionIndex));
     state = createEmptyState();
+    patrolRoutesVisible = null;
     route = MissionRoute?.createEmptyRoute?.() || { points: [], actions: [] };
     MissionRoute?.clearRouteVisual?.(ctx?.scene);
     MissionRoute?.hide?.();
@@ -640,7 +734,9 @@
   function clearScene() {
     if (!root) return;
     stopObjectivePulseLoop();
+    clearPatrolRouteMeshes();
     npcActors = [];
+    gateActors = [];
     clearEnvironmentEffects();
     objectMarkers = {};
     if (missionShadowGenerator) {
@@ -684,6 +780,8 @@
       ctx.camera.setTarget(BABYLON.Vector3.Zero());
     }
     startObjectivePulseLoop();
+    renderNpcPatrolRoutes();
+    refreshObjectiveVisibility();
   }
 
   function createMissionGround(chapter, mission) {
@@ -713,6 +811,47 @@
 
   function getObjectFootprint(item) {
     return OBJECT_FOOTPRINT[item.type] ?? 0;
+  }
+
+  function getTerrainCollisionFootprint(item) {
+    return TERRAIN_COLLISION_FOOTPRINT[item?.type] ?? 0;
+  }
+
+  function terrainOccupiesCell(item, x, z) {
+    if (!item || item.type === 'npc') return false;
+    const fp = getTerrainCollisionFootprint(item);
+    return Math.abs(item.x - x) <= fp && Math.abs(item.z - z) <= fp;
+  }
+
+  function terrainCellsForItem(item) {
+    const fp = getTerrainCollisionFootprint(item);
+    const cells = [];
+    for (let dx = -fp; dx <= fp; dx++) {
+      for (let dz = -fp; dz <= fp; dz++) {
+        cells.push({ x: item.x + dx, z: item.z + dz });
+      }
+    }
+    return cells;
+  }
+
+  function createTerrainCellPad(parent, color, { deadly = false, alpha = 0.42 } = {}) {
+    const pad = BABYLON.MeshBuilder.CreateGround('terrainPad', { width: STEP * 0.92, height: STEP * 0.92 }, ctx.scene);
+    pad.position.y = 0.03;
+    const mat = createMat(`terrainPadMat-${parent.name}`, color, deadly ? 0.55 : 0.28, deadly ? 0.35 : 0.15);
+    mat.alpha = alpha;
+    pad.material = mat;
+    pad.parent = parent;
+    pad.isPickable = false;
+    return pad;
+  }
+
+  function addTerrainFootprintPads(parent, item, deadly, color) {
+    terrainCellsForItem(item).forEach((cell, index) => {
+      const pad = createTerrainCellPad(parent, color, { deadly, alpha: deadly ? 0.48 : 0.32 });
+      pad.position.x = (cell.x - item.x) * STEP;
+      pad.position.z = (cell.z - item.z) * STEP;
+      pad.name = `terrainPad${index}`;
+    });
   }
 
   function occupiesStartCell(item, start, footprint = getObjectFootprint(item)) {
@@ -845,8 +984,8 @@
       createRoadStrip('coastWater', -6, -4, 3.5, 12, [0.08, 0.42, 0.78]);
       createRoadStrip('coastShore', -4, -3, 8, 0.35, [0.55, 0.72, 0.88]);
     } else if (theme === 'volcano') {
-      createRoadStrip('volcanoLavaA', 1, -1, 10, 0.4, [0.85, 0.28, 0.08]);
-      createRoadStrip('volcanoLavaB', -2, 2, 6, 0.35, [0.72, 0.22, 0.06]);
+      createRoadStrip('volcanoAshPathA', 1, -1, 10, 0.4, [0.34, 0.24, 0.18]);
+      createRoadStrip('volcanoAshPathB', -2, 2, 6, 0.35, [0.32, 0.22, 0.16]);
       createRoadStrip('volcanoAsh', 0, 0, 14, 0.25, [0.38, 0.28, 0.22]);
       for (let i = -3; i <= 3; i += 2) {
         createRoadStrip(`volcanoCrack${i}`, i * 0.8, -4, 0.22, 2.8, [0.48, 0.18, 0.06]);
@@ -1006,10 +1145,18 @@
         role: item.role || 'worker',
         x: item.x,
         z: item.z,
+        speed: Math.max(1, item.speed || 1),
+        warnRadius: item.warnRadius ?? 1,
         patrol: (item.patrol?.length ? item.patrol : [{ x: item.x, z: item.z }]).map((p) => ({ x: p.x, z: p.z })),
         patrolIndex: 0,
         holder,
       });
+      return;
+    }
+    if (item.type === 'gate') {
+      const loaded = await tryLoadModel(item, holder);
+      if (!loaded) createSafetyGate(holder, item);
+      registerGateActor(item, holder);
       return;
     }
     const loaded = await tryLoadModel(item, holder);
@@ -1048,17 +1195,17 @@
     else if (item.type === 'streetLight') createStreetLight(parent);
     else if (item.type === 'base' && mission.theme === 'rescue') createRescueTent(parent);
     else if (item.type === 'base' && mission.theme === 'space') createMoonBase(parent);
-    else if (item.type === 'hazard' && mission.theme === 'coast') createWaveHazard(parent);
-    else if (item.type === 'hazard' && mission.theme === 'volcano') createLavaHazard(parent);
-    else if (item.type === 'hazard' && mission.theme === 'lab') createLabHazard(parent);
-    else if (item.type === 'hazard' && mission.theme === 'space') createAsteroid(parent);
-    else if (item.type === 'hazard') createRubble(parent);
-    else if (item.type === 'lava') createLavaHazard(parent);
-    else if (item.type === 'heat') createHeatZone(parent);
-    else if (item.type === 'volcano') createVolcanoCone(parent);
+    else if (item.type === 'hazard' && mission.theme === 'coast') createWaveHazard(parent, item);
+    else if (item.type === 'hazard' && mission.theme === 'volcano') createLavaHazard(parent, item);
+    else if (item.type === 'hazard' && mission.theme === 'lab') createLabHazard(parent, item);
+    else if (item.type === 'hazard' && mission.theme === 'space') createAsteroid(parent, item);
+    else if (item.type === 'hazard') createRubble(parent, item);
+    else if (item.type === 'lava') createLavaHazard(parent, item);
+    else if (item.type === 'heat') createHeatZone(parent, item);
+    else if (item.type === 'volcano') createVolcanoCone(parent, item);
     else if (item.type === 'labBench') createLabBench(parent);
     else if (item.type === 'specimen') createSpecimenJar(parent);
-    else if (item.type === 'rubble') createRubble(parent);
+    else if (item.type === 'rubble') createRubble(parent, item);
     else if (item.type === 'beacon') createSignalBeacon(parent, item.label);
     else if (item.type === 'crop') createCropField(parent);
     else if (item.type === 'canal') createCanal(parent);
@@ -1066,7 +1213,7 @@
     else if (item.type === 'breeze') createBreezeMarker(parent, item);
     else if (item.type === 'lighthouse') createLighthouse(parent);
     else if (item.type === 'shelf') createWarehouseShelf(parent);
-    else if (item.type === 'gate') createSafetyGate(parent);
+    else if (item.type === 'gate') createSafetyGate(parent, item);
     else if (item.type === 'asteroid') createAsteroid(parent);
     else if (item.type === 'npc') createPedestrian(parent, item.role || 'worker');
     else createGenericAsset(parent, item.type);
@@ -1108,26 +1255,38 @@
     }[item.type] || '任務點');
   }
 
-  function createFloatingObjectiveLabel(parent, text, color) {
-    const display = (text || '任務點').slice(0, 12);
+  function createFloatingSignLabel(parent, lines, color, { bgTint = null } = {}) {
+    const lineTexts = (Array.isArray(lines) ? lines : [lines]).filter(Boolean).map((line) => String(line).slice(0, 14));
+    const twoLine = lineTexts.length > 1;
     const texW = 512;
-    const texH = 128;
-    const tex = new BABYLON.DynamicTexture(`objLbl-${parent.name}`, { width: texW, height: texH }, ctx.scene, false);
+    const texH = twoLine ? 160 : 128;
+    const tex = new BABYLON.DynamicTexture(`signLbl-${parent.name}-${Date.now()}`, { width: texW, height: texH }, ctx.scene, false);
     const ctx2d = tex.getContext();
-    ctx2d.fillStyle = 'rgba(8, 16, 32, 0.86)';
+    ctx2d.fillStyle = bgTint || 'rgba(8, 16, 32, 0.86)';
     ctx2d.fillRect(0, 0, texW, texH);
     ctx2d.strokeStyle = `rgb(${Math.floor(color[0] * 255)},${Math.floor(color[1] * 255)},${Math.floor(color[2] * 255)})`;
     ctx2d.lineWidth = 6;
     ctx2d.strokeRect(8, 8, texW - 16, texH - 16);
     ctx2d.fillStyle = '#f8fafc';
-    ctx2d.font = 'bold 42px "Microsoft YaHei", sans-serif';
     ctx2d.textAlign = 'center';
     ctx2d.textBaseline = 'middle';
-    ctx2d.fillText(display, texW / 2, texH / 2);
+    if (twoLine) {
+      ctx2d.font = 'bold 38px "Microsoft YaHei", sans-serif';
+      ctx2d.fillText(lineTexts[0], texW / 2, texH / 2 - 24);
+      ctx2d.font = 'bold 28px "Microsoft YaHei", sans-serif';
+      ctx2d.fillStyle = '#dbeafe';
+      ctx2d.fillText(lineTexts[1], texW / 2, texH / 2 + 26);
+    } else {
+      ctx2d.font = 'bold 42px "Microsoft YaHei", sans-serif';
+      ctx2d.fillText(lineTexts[0], texW / 2, texH / 2);
+    }
     tex.update();
 
-    const plane = BABYLON.MeshBuilder.CreatePlane(`objLblPlane-${parent.name}`, { width: 1.65, height: 0.42 }, ctx.scene);
-    const mat = new BABYLON.StandardMaterial(`objLblMat-${parent.name}`, ctx.scene);
+    const plane = BABYLON.MeshBuilder.CreatePlane(`signLblPlane-${parent.name}`, {
+      width: 1.65,
+      height: twoLine ? 0.52 : 0.42,
+    }, ctx.scene);
+    const mat = new BABYLON.StandardMaterial(`signLblMat-${parent.name}`, ctx.scene);
     mat.diffuseTexture = tex;
     mat.emissiveTexture = tex;
     mat.emissiveColor = new BABYLON.Color3(color[0], color[1], color[2]).scale(0.4);
@@ -1138,9 +1297,49 @@
     plane.parent = parent;
     plane.position.y = 2.85;
     plane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
-    plane.metadata = { isLabelPlane: true };
+    plane.metadata = { isLabelPlane: true, isSignLabel: true, signTexture: tex };
     plane.isPickable = false;
     return plane;
+  }
+
+  function paintFloatingSignLabel(plane, lines, color, { bgTint = null } = {}) {
+    if (!plane?.material?.diffuseTexture?.getContext) return;
+    const lineTexts = (Array.isArray(lines) ? lines : [lines]).filter(Boolean).map((line) => String(line).slice(0, 14));
+    const twoLine = lineTexts.length > 1;
+    const tex = plane.material.diffuseTexture;
+    const texW = tex.getSize().width;
+    const texH = tex.getSize().height;
+    const ctx2d = tex.getContext();
+    ctx2d.fillStyle = bgTint || 'rgba(8, 16, 32, 0.86)';
+    ctx2d.fillRect(0, 0, texW, texH);
+    ctx2d.strokeStyle = `rgb(${Math.floor(color[0] * 255)},${Math.floor(color[1] * 255)},${Math.floor(color[2] * 255)})`;
+    ctx2d.lineWidth = 6;
+    ctx2d.strokeRect(8, 8, texW - 16, texH - 16);
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    if (twoLine) {
+      ctx2d.fillStyle = '#f8fafc';
+      ctx2d.font = 'bold 38px "Microsoft YaHei", sans-serif';
+      ctx2d.fillText(lineTexts[0], texW / 2, texH / 2 - 24);
+      ctx2d.font = 'bold 28px "Microsoft YaHei", sans-serif';
+      ctx2d.fillStyle = '#dbeafe';
+      ctx2d.fillText(lineTexts[1], texW / 2, texH / 2 + 26);
+    } else {
+      ctx2d.fillStyle = '#f8fafc';
+      ctx2d.font = 'bold 42px "Microsoft YaHei", sans-serif';
+      ctx2d.fillText(lineTexts[0], texW / 2, texH / 2);
+    }
+    tex.update();
+    plane.material.emissiveColor = new BABYLON.Color3(color[0], color[1], color[2]).scale(0.4);
+  }
+
+  function createFloatingObjectiveLabel(parent, text, color) {
+    return createFloatingSignLabel(parent, [text], color);
+  }
+
+  function getGateSignLines(item, open = false) {
+    const hint = MissionFeedback?.getGateHintText?.(item, open) || (open ? '已開啟，可通過' : '完成條件後開啟');
+    return [item.label || '閘門', hint];
   }
 
   function createObjectiveMarker(parent, item) {
@@ -1258,6 +1457,25 @@
           }
         });
       });
+      gateActors.forEach((gate) => {
+        if (!gate.blocking) return;
+        const open = state.gatesOpen.has(gate.label);
+        const pulse = open
+          ? 0.45 + Math.sin(objectivePulseTime * 2.5) * 0.15
+          : 0.55 + Math.sin(objectivePulseTime * 4) * 0.35;
+        if (!open && gate.barrier?.material) {
+          gate.barrier.material.alpha = 0.35 + Math.sin(objectivePulseTime * 4) * 0.2;
+          gate.barrier.material.emissiveColor = new BABYLON.Color3(0.95, 0.2, 0.1).scale(pulse);
+        }
+        if (gate.ring?.material?.emissiveColor) {
+          const ringColor = open ? GATE_SIGN_COLOR_OPEN : GATE_SIGN_COLOR;
+          gate.ring.material.emissiveColor = new BABYLON.Color3(ringColor[0], ringColor[1], ringColor[2]).scale(pulse);
+          gate.ring.scaling.setAll(1 + Math.sin(objectivePulseTime * 3) * 0.06);
+        }
+        if (gate.labelPlane?.metadata?.isSignLabel) {
+          gate.labelPlane.position.y = 2.85 + Math.sin(objectivePulseTime * 2) * 0.08;
+        }
+      });
     });
   }
 
@@ -1290,12 +1508,16 @@
   function advanceNpcs() {
     npcActors.forEach((actor) => {
       if (!actor.patrol?.length) return;
-      actor.patrolIndex = (actor.patrolIndex + 1) % actor.patrol.length;
-      const next = actor.patrol[actor.patrolIndex];
-      actor.x = next.x;
-      actor.z = next.z;
+      const steps = actor.speed || 1;
+      for (let step = 0; step < steps; step++) {
+        actor.patrolIndex = (actor.patrolIndex + 1) % actor.patrol.length;
+        const next = actor.patrol[actor.patrolIndex];
+        actor.x = next.x;
+        actor.z = next.z;
+      }
       syncNpcHolder(actor);
     });
+    refreshNpcProximityWarning();
   }
 
   function npcAt(x, z) {
@@ -1317,6 +1539,237 @@
       return true;
     }
     return false;
+  }
+
+  function npcAhead() {
+    const vector = forwardVector();
+    return Boolean(npcAt(state.x + vector.dx, state.z + vector.dz));
+  }
+
+  function refreshNpcProximityWarning() {
+    npcProximityWarning = '';
+    npcActors.forEach((actor) => {
+      const radius = actor.warnRadius ?? 0;
+      if (!radius) return;
+      const dist = Math.abs(actor.x - state.x) + Math.abs(actor.z - state.z);
+      if (dist <= radius && dist > 0) {
+        npcProximityWarning = `行人「${actor.label}」接近中`;
+      }
+    });
+  }
+
+  function registerGateActor(item, holder) {
+    if (!gateStartsClosed(item) && item.opensOn !== 'manual') {
+      state.gatesOpen.add(item.label);
+    }
+    const actor = {
+      label: item.label,
+      x: item.x,
+      z: item.z,
+      item,
+      holder,
+      beam: holder.metadata?.gateBeam || null,
+      barrier: holder.metadata?.gateBarrier || null,
+      ring: holder.metadata?.gateRing || null,
+      labelPlane: holder.metadata?.gateLabel || null,
+      blocking: gateStartsClosed(item),
+    };
+    gateActors.push(actor);
+    updateGateVisual(actor);
+  }
+
+  function isGateBlocking(x, z) {
+    const gate = gateActors.find((actor) => actor.x === x && actor.z === z);
+    if (!gate || !gate.blocking) return false;
+    return !state.gatesOpen.has(gate.label);
+  }
+
+  function gateClosedAhead() {
+    const vector = forwardVector();
+    return isGateBlocking(state.x + vector.dx, state.z + vector.dz);
+  }
+
+  function updateGateVisual(gate) {
+    if (!gate) return;
+    const open = state.gatesOpen.has(gate.label);
+    if (gate.beam?.material) {
+      if (open) {
+        gate.beam.material = createMat(`gateOpen-${gate.label}`, [0.15, 0.9, 0.35], 0.75, 0.35);
+        gate.beam.position.y = 0.5;
+        gate.beam.scaling.y = 0.35;
+      } else {
+        gate.beam.material = createMat(`gateClosed-${gate.label}`, [0.95, 0.2, 0.15], 0.85);
+        gate.beam.position.y = 0.95;
+        gate.beam.scaling.y = 1;
+      }
+    }
+    if (gate.barrier) {
+      gate.barrier.isVisible = !open && gate.blocking;
+      if (gate.barrier.material) {
+        gate.barrier.material = createMat(
+          `gateBarrier-${gate.label}-${open ? 'open' : 'closed'}`,
+          open ? [0.15, 0.9, 0.35] : [0.95, 0.2, 0.15],
+          open ? 0.35 : 0.75,
+          open ? 0.12 : 0.55,
+        );
+      }
+    }
+    if (gate.ring?.material) {
+      gate.ring.material = createMat(`gateRing-${gate.label}`, open ? [0.15, 0.9, 0.35] : [0.95, 0.25, 0.1], open ? 0.4 : 0.75);
+    }
+    if (gate.labelPlane) {
+      gate.labelPlane.isVisible = gate.blocking;
+      if (gate.item?.label) {
+        const open = state.gatesOpen.has(gate.label);
+        const color = open ? GATE_SIGN_COLOR_OPEN : GATE_SIGN_COLOR;
+        paintFloatingSignLabel(gate.labelPlane, getGateSignLines(gate.item, open), color, {
+          bgTint: open ? 'rgba(8, 24, 16, 0.86)' : 'rgba(8, 16, 32, 0.86)',
+        });
+      }
+    }
+    renderGuideDock();
+  }
+
+  function checkGateTriggers(kind, label = '') {
+    const triggers = new Set([kind, label ? `${kind}:${label}` : '']);
+    let opened = false;
+    gateActors.forEach((gate) => {
+      if (!gate.blocking || state.gatesOpen.has(gate.label)) return;
+      const opensOn = gate.item.opensOn;
+      if (!opensOn || opensOn === 'manual') return;
+      if (triggers.has(opensOn)) {
+        state.gatesOpen.add(gate.label);
+        updateGateVisual(gate);
+        opened = true;
+      }
+    });
+    if (opened) {
+      playSound('scan');
+      ctx.toast?.('🚪 閘門已開啟！', 'success');
+    }
+    refreshPhaseProgress();
+    refreshObjectiveVisibility();
+  }
+
+  function openGateManual() {
+    const gateItem = objectAt(state.x, state.z, ['gate']);
+    if (!gateItem) {
+      ctx.toast?.('🚧 這裡沒有可操作的閘門', 'warn');
+      return;
+    }
+    if (gateItem.opensOn !== 'manual') {
+      ctx.toast?.('🚧 此閘門會在完成任務後自動開啟', 'warn');
+      return;
+    }
+    state.gatesOpen.add(gateItem.label);
+    const actor = gateActors.find((gate) => gate.label === gateItem.label);
+    if (actor) updateGateVisual(actor);
+    playSound('scan');
+    ctx.toast?.(`🚪 已開啟「${gateItem.label}」`, 'success');
+    refreshPhaseProgress();
+    refreshObjectiveVisibility();
+  }
+
+  function windAhead() {
+    const vector = forwardVector();
+    const cell = terrainAt(state.x + vector.dx, state.z + vector.dz);
+    return cell?.type === 'breeze' || cell?.type === 'windTurbine';
+  }
+
+  function strongWindAhead() {
+    if (!windAhead()) return false;
+    const vector = forwardVector();
+    const cell = terrainAt(state.x + vector.dx, state.z + vector.dz);
+    const wind = getWindDirection(cell);
+    const dot = vector.dx * wind.dx + vector.dz * wind.dz;
+    return dot > 0;
+  }
+
+  function shouldShowPatrolRoutes() {
+    const mission = currentMission();
+    if (!mission || !npcActors.length) return false;
+    if (patrolRoutesVisible === false) return false;
+    if (patrolRoutesVisible === true) return true;
+    if (mission.showPatrolRoutes === false) return false;
+    if (mission.showPatrolRoutes === true) return true;
+    return ['lab-1', 'lab-2', 'rescue-1', 'campus-2'].includes(mission.id);
+  }
+
+  function missionHasNpcs() {
+    const mission = currentMission();
+    return Boolean((mission?.objects || []).some((item) => item.type === 'npc'));
+  }
+
+  function togglePatrolRoutes(forceVisible) {
+    if (typeof forceVisible === 'boolean') patrolRoutesVisible = forceVisible;
+    else patrolRoutesVisible = !shouldShowPatrolRoutes();
+    renderNpcPatrolRoutes();
+    renderGuideDock();
+  }
+
+  function clearPatrolRouteMeshes() {
+    patrolRouteMeshes.forEach((mesh) => mesh.dispose());
+    patrolRouteMeshes = [];
+  }
+
+  function renderNpcPatrolRoutes() {
+    clearPatrolRouteMeshes();
+    if (!shouldShowPatrolRoutes() || !root || !ctx?.scene) return;
+    npcActors.forEach((actor, index) => {
+      if (!actor.patrol || actor.patrol.length < 2) return;
+      const points = actor.patrol.map((point) => new BABYLON.Vector3(point.x * STEP, 0.1, point.z * STEP));
+      const line = BABYLON.MeshBuilder.CreateLines(`npcPatrol${index}`, { points }, ctx.scene);
+      line.color = new BABYLON.Color3(0.95, 0.55, 0.2);
+      line.alpha = 0.55;
+      line.parent = root;
+      patrolRouteMeshes.push(line);
+    });
+  }
+
+  function refreshObjectiveVisibility() {
+    const mission = currentMission();
+    if (!mission || !MissionFeedback?.isObjectiveActive) return;
+    Object.values(objectMarkers).forEach((entry) => {
+      if (!entry?.holder) return;
+      const active = MissionFeedback.isObjectiveActive(state, mission, entry.item, feedbackHelpers());
+      entry.holder.setEnabled(active);
+    });
+  }
+
+  function refreshPhaseProgress() {
+    const mission = currentMission();
+    if (!mission?.phases?.length || !MissionFeedback?.isPhaseComplete) return;
+    let changed = false;
+    mission.phases.forEach((phase) => {
+      if (state.phasesDone.has(phase.id)) return;
+      if (MissionFeedback.isPhaseComplete(state, mission, phase, feedbackHelpers())) {
+        state.phasesDone.add(phase.id);
+        changed = true;
+      }
+    });
+    if (changed) {
+      renderGuideDock();
+      refreshObjectiveVisibility();
+    }
+  }
+
+  function tickMissionTimer() {
+    if (!missionRunStart) return;
+    state.elapsedSec = (performance.now() - missionRunStart) / 1000;
+    const mission = currentMission();
+    if (mission?.timeLimitSec && state.elapsedSec > mission.timeLimitSec) {
+      state.hitTimeout = true;
+      state.hitHazard = true;
+    }
+  }
+
+  function checkMissionTimeout() {
+    tickMissionTimer();
+    if (!state.hitTimeout) return false;
+    updateHud('時間到');
+    playSound('missionFail');
+    showResult(false);
+    return true;
   }
 
   function createSchoolBuilding(parent) {
@@ -1363,13 +1816,15 @@
     lamp.position.y = 1.85;
   }
 
-  function createRubble(parent) {
+  function createRubble(parent, item = {}) {
+    if (item.x != null) addTerrainFootprintPads(parent, item, false, [0.42, 0.36, 0.32]);
     const mat = createMat('rubbleMat', [0.42, 0.36, 0.32]);
-    for (let i = 0; i < 7; i++) {
-      const rock = parentMesh(BABYLON.MeshBuilder.CreatePolyhedron(`rubble${i}`, { type: 0, size: 0.55 + i * 0.06 }, ctx.scene), parent, mat);
-      rock.position = new BABYLON.Vector3((i % 3 - 1) * 0.45, 0.45 + i * 0.08, (Math.floor(i / 3) - 0.8) * 0.45);
-      rock.scaling.y = 1.25;
-      rock.rotation = new BABYLON.Vector3(i * 0.3, i * 0.5, i * 0.2);
+    const sizes = [0.52, 0.48, 0.44, 0.4, 0.36, 0.32, 0.28];
+    for (let i = 0; i < sizes.length; i++) {
+      const rock = parentMesh(BABYLON.MeshBuilder.CreatePolyhedron(`rubble${i}`, { type: 0, size: sizes[i] }, ctx.scene), parent, mat);
+      rock.position = new BABYLON.Vector3((i % 3 - 1) * 0.34, 0.28 + (i % 3) * 0.12, (Math.floor(i / 3) - 1) * 0.3);
+      rock.scaling.y = 1.2;
+      rock.rotation = new BABYLON.Vector3(i * 0.25, i * 0.45, i * 0.18);
     }
   }
 
@@ -1451,36 +1906,60 @@
     roof.rotation.y = Math.PI / 4;
   }
 
-  function createWaveHazard(parent) {
+  function createWaveHazard(parent, item = {}) {
+    addTerrainFootprintPads(parent, item, true, [0.12, 0.48, 0.88]);
     const mat = createMat('waveHazardMat', [0.12, 0.48, 0.88], 0.25, 0.55);
-    for (let i = 0; i < 5; i++) {
-      const wave = parentMesh(BABYLON.MeshBuilder.CreateBox(`wave${i}`, { width: 0.55 + i * 0.08, height: 0.25 + i * 0.06, depth: 0.45 }, ctx.scene), parent, mat);
-      wave.position = new BABYLON.Vector3((i % 2 - 0.5) * 0.35, 0.18 + i * 0.05, (Math.floor(i / 2) - 0.5) * 0.35);
+    const foamMat = createMat('waveFoamMat', [0.75, 0.92, 0.98], 0.35, 0.45);
+    const base = parentMesh(BABYLON.MeshBuilder.CreateBox('waveBase', { width: STEP * 0.88, height: 0.12, depth: STEP * 0.88 }, ctx.scene), parent, mat);
+    base.position.y = 0.08;
+    for (let i = 0; i < 6; i++) {
+      const wave = parentMesh(BABYLON.MeshBuilder.CreateBox(`wave${i}`, { width: 0.55 + (i % 3) * 0.08, height: 0.28 + (i % 2) * 0.08, depth: 0.42 }, ctx.scene), parent, mat);
+      wave.position = new BABYLON.Vector3((i % 3 - 1) * 0.28, 0.22 + (i % 2) * 0.06, (Math.floor(i / 3) - 0.5) * 0.28);
+      const foam = parentMesh(BABYLON.MeshBuilder.CreateSphere(`waveFoam${i}`, { diameter: 0.14, segments: 8 }, ctx.scene), parent, foamMat);
+      foam.position = new BABYLON.Vector3(wave.position.x, wave.position.y + 0.18, wave.position.z + 0.12);
     }
   }
 
-  function createLavaHazard(parent) {
+  function createLavaHazard(parent, item = {}) {
+    addTerrainFootprintPads(parent, item, true, [0.95, 0.35, 0.08]);
     const mat = createMat('lavaHazardMat', [0.95, 0.35, 0.08], 0.55, 0.72);
-    const pool = parentMesh(BABYLON.MeshBuilder.CreateCylinder('lavaPool', { height: 0.12, diameter: 1.15, tessellation: 12 }, ctx.scene), parent, mat);
-    pool.position.y = 0.08;
-    for (let i = 0; i < 4; i++) {
-      const blob = parentMesh(BABYLON.MeshBuilder.CreateSphere(`lavaBlob${i}`, { diameter: 0.28 + i * 0.06, segments: 8 }, ctx.scene), parent, mat);
-      blob.position = new BABYLON.Vector3((i % 2 - 0.5) * 0.35, 0.2, (Math.floor(i / 2) - 0.5) * 0.3);
+    const rimMat = createMat('lavaRimMat', [0.55, 0.18, 0.05], 0.2, 0.35);
+    const pool = parentMesh(BABYLON.MeshBuilder.CreateCylinder('lavaPool', { height: 0.16, diameter: STEP * 0.92, tessellation: 16 }, ctx.scene), parent, mat);
+    pool.position.y = 0.1;
+    const rim = parentMesh(BABYLON.MeshBuilder.CreateTorus('lavaRim', { diameter: STEP * 0.9, thickness: 0.08, tessellation: 16 }, ctx.scene), parent, rimMat);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.14;
+    for (let i = 0; i < 5; i++) {
+      const blob = parentMesh(BABYLON.MeshBuilder.CreateSphere(`lavaBlob${i}`, { diameter: 0.28 + (i % 3) * 0.06, segments: 10 }, ctx.scene), parent, mat);
+      blob.position = new BABYLON.Vector3((i % 3 - 1) * 0.26, 0.24 + (i % 2) * 0.08, (Math.floor(i / 3) - 0.5) * 0.22);
     }
   }
 
-  function createHeatZone(parent) {
+  function createHeatZone(parent, item = {}) {
+    addTerrainFootprintPads(parent, item, false, [1, 0.55, 0.15]);
     const mat = createMat('heatZoneMat', [1, 0.55, 0.15], 0.45, 0.38);
-    const ring = parentMesh(BABYLON.MeshBuilder.CreateTorus('heatRing', { diameter: 1.0, thickness: 0.05 }, ctx.scene), parent, mat);
+    const span = STEP * 0.86;
+    [-1, 1].forEach((side, i) => {
+      const pillar = parentMesh(BABYLON.MeshBuilder.CreateBox(`heatPillar${i}`, { width: 0.12, height: 1.35, depth: 0.12 }, ctx.scene), parent, mat);
+      pillar.position = new BABYLON.Vector3(side * span * 0.42, 0.68, 0);
+      const arch = parentMesh(BABYLON.MeshBuilder.CreateTorus(`heatArch${i}`, { diameter: span * 0.55, thickness: 0.05, tessellation: 12 }, ctx.scene), parent, mat);
+      arch.rotation.z = side > 0 ? 0 : Math.PI;
+      arch.position = new BABYLON.Vector3(side * span * 0.18, 1.15, 0);
+    });
+    const ring = parentMesh(BABYLON.MeshBuilder.CreateTorus('heatRing', { diameter: STEP * 0.84, thickness: 0.06 }, ctx.scene), parent, mat);
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.06;
-    const shimmer = parentMesh(BABYLON.MeshBuilder.CreateBox('heatShimmer', { width: 0.7, height: 0.5, depth: 0.04 }, ctx.scene), parent, mat);
-    shimmer.position.y = 0.35;
+    ring.position.y = 0.07;
+    const shimmer = parentMesh(BABYLON.MeshBuilder.CreateBox('heatShimmer', { width: STEP * 0.62, height: 0.65, depth: 0.05 }, ctx.scene), parent, mat);
+    shimmer.position.y = 0.42;
+    const innerRing = parentMesh(BABYLON.MeshBuilder.CreateTorus('heatInnerRing', { diameter: STEP * 0.58, thickness: 0.04 }, ctx.scene), parent, mat);
+    innerRing.rotation.x = Math.PI / 2;
+    innerRing.position.y = 0.12;
   }
 
-  function createVolcanoCone(parent) {
+  function createVolcanoCone(parent, item = {}) {
+    addTerrainFootprintPads(parent, item, true, [0.45, 0.28, 0.22]);
     const rockMat = createMat('volcanoRock', [0.32, 0.24, 0.2]);
-    const cone = parentMesh(BABYLON.MeshBuilder.CreateCylinder('volcanoCone', { height: 2.4, diameterTop: 0.2, diameterBottom: 1.8, tessellation: 10 }, ctx.scene), parent, rockMat);
+    const cone = parentMesh(BABYLON.MeshBuilder.CreateCylinder('volcanoCone', { height: 2.4, diameterTop: 0.2, diameterBottom: STEP * 0.88, tessellation: 10 }, ctx.scene), parent, rockMat);
     cone.position.y = 1.2;
     const crater = parentMesh(BABYLON.MeshBuilder.CreateCylinder('volcanoCrater', { height: 0.2, diameter: 0.55 }, ctx.scene), parent, createMat('volcanoCrater', [0.9, 0.32, 0.1], 0.5));
     crater.position.y = 2.45;
@@ -1523,13 +2002,24 @@
     parent.metadata = { markerType: 'report', label, meshes: [base, screen] };
   }
 
-  function createLabHazard(parent) {
+  function createLabHazard(parent, item = {}) {
+    addTerrainFootprintPads(parent, item, true, [0.2, 0.82, 0.45]);
     const mat = createMat('labHazardMat', [0.2, 0.82, 0.45], 0.35, 0.55);
-    const pool = parentMesh(BABYLON.MeshBuilder.CreateBox('labHazardPool', { width: 0.95, height: 0.08, depth: 0.85 }, ctx.scene), parent, mat);
-    pool.position.y = 0.06;
-    for (let i = 0; i < 3; i++) {
-      const bubble = parentMesh(BABYLON.MeshBuilder.CreateSphere(`labBubble${i}`, { diameter: 0.18, segments: 8 }, ctx.scene), parent, mat);
-      bubble.position = new BABYLON.Vector3((i - 1) * 0.28, 0.18, (i % 2) * 0.2 - 0.1);
+    const frameMat = createMat('labHazardFrame', [0.15, 0.55, 0.32], 0.15, 0.25);
+    const span = STEP * 0.9;
+    [-1, 1].forEach((side, i) => {
+      const wall = parentMesh(BABYLON.MeshBuilder.CreateBox(`labWall${i}`, { width: 0.08, height: 0.75, depth: span }, ctx.scene), parent, frameMat);
+      wall.position = new BABYLON.Vector3(side * span * 0.44, 0.38, 0);
+      const rail = parentMesh(BABYLON.MeshBuilder.CreateBox(`labRail${i}`, { width: span, height: 0.08, depth: 0.08 }, ctx.scene), parent, frameMat);
+      rail.position = new BABYLON.Vector3(0, 0.72, side * span * 0.44);
+    });
+    const pool = parentMesh(BABYLON.MeshBuilder.CreateBox('labHazardPool', { width: STEP * 0.72, height: 0.14, depth: STEP * 0.72 }, ctx.scene), parent, mat);
+    pool.position.y = 0.1;
+    const tank = parentMesh(BABYLON.MeshBuilder.CreateCylinder('labTank', { height: 0.55, diameter: STEP * 0.48, tessellation: 12 }, ctx.scene), parent, mat);
+    tank.position.y = 0.42;
+    for (let i = 0; i < 5; i++) {
+      const bubble = parentMesh(BABYLON.MeshBuilder.CreateSphere(`labBubble${i}`, { diameter: 0.2 + (i % 2) * 0.05, segments: 10 }, ctx.scene), parent, mat);
+      bubble.position = new BABYLON.Vector3((i % 3 - 1) * 0.24, 0.28 + (i % 2) * 0.18, ((i + 1) % 3 - 1) * 0.18);
     }
   }
 
@@ -1544,17 +2034,47 @@
     }
   }
 
-  function createSafetyGate(parent) {
-    const frameMat = createMat('gateFrame', [0.18, 0.26, 0.34]);
-    const lightMat = createMat('gateLight', [0.1, 0.8, 1], 0.65);
-    const left = parentMesh(BABYLON.MeshBuilder.CreateBox('gateLeft', { width: 0.12, height: 1.4, depth: 0.12 }, ctx.scene), parent, frameMat);
-    left.position = new BABYLON.Vector3(-0.55, 0.7, 0);
-    const right = parentMesh(BABYLON.MeshBuilder.CreateBox('gateRight', { width: 0.12, height: 1.4, depth: 0.12 }, ctx.scene), parent, frameMat);
-    right.position = new BABYLON.Vector3(0.55, 0.7, 0);
-    const top = parentMesh(BABYLON.MeshBuilder.CreateBox('gateTop', { width: 1.25, height: 0.12, depth: 0.12 }, ctx.scene), parent, frameMat);
-    top.position.y = 1.35;
-    const beam = parentMesh(BABYLON.MeshBuilder.CreateBox('gateBeam', { width: 1.05, height: 0.035, depth: 0.035 }, ctx.scene), parent, lightMat);
-    beam.position.y = 0.78;
+  function createSafetyGate(parent, item = {}) {
+    const frameMat = createMat('gateFrame', [0.22, 0.28, 0.38], 0.12);
+    const closed = gateStartsClosed(item);
+    const accent = closed ? [0.95, 0.2, 0.15] : [0.15, 0.9, 0.35];
+    const lightMat = createMat('gateLight', accent, closed ? 0.85 : 0.65);
+    const left = parentMesh(BABYLON.MeshBuilder.CreateBox('gateLeft', { width: 0.18, height: 1.8, depth: 0.18 }, ctx.scene), parent, frameMat);
+    left.position = new BABYLON.Vector3(-0.65, 0.9, 0);
+    const right = parentMesh(BABYLON.MeshBuilder.CreateBox('gateRight', { width: 0.18, height: 1.8, depth: 0.18 }, ctx.scene), parent, frameMat);
+    right.position = new BABYLON.Vector3(0.65, 0.9, 0);
+    const top = parentMesh(BABYLON.MeshBuilder.CreateBox('gateTop', { width: 1.5, height: 0.16, depth: 0.18 }, ctx.scene), parent, frameMat);
+    top.position.y = 1.75;
+    const ring = parentMesh(
+      BABYLON.MeshBuilder.CreateTorus('gateRing', { diameter: 1.45, thickness: 0.1, tessellation: 32 }, ctx.scene),
+      parent,
+      createMat('gateRingMat', accent, 0.7),
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.08;
+    const beam = parentMesh(BABYLON.MeshBuilder.CreateBox('gateBeam', { width: 1.2, height: 0.08, depth: 0.08 }, ctx.scene), parent, lightMat);
+    beam.position.y = closed ? 0.95 : 0.5;
+    if (!closed) beam.scaling.y = 0.35;
+    const barrier = parentMesh(
+      BABYLON.MeshBuilder.CreatePlane('gateBarrier', { width: 1.25, height: 1.65 }, ctx.scene),
+      parent,
+      createMat('gateBarrierMat', accent, 0.75, closed ? 0.55 : 0.12),
+    );
+    barrier.position.y = 0.85;
+    barrier.isVisible = closed;
+    const signColor = closed ? GATE_SIGN_COLOR : GATE_SIGN_COLOR_OPEN;
+    const labelPlane = item.label
+      ? createFloatingSignLabel(parent, getGateSignLines(item, !closed), signColor, {
+        bgTint: closed ? 'rgba(8, 16, 32, 0.86)' : 'rgba(8, 24, 16, 0.86)',
+      })
+      : null;
+    parent.metadata = {
+      gateBeam: beam,
+      gateBarrier: barrier,
+      gateRing: ring,
+      gateLabel: labelPlane,
+      gateMeshes: [left, right, top, ring, beam, barrier, labelPlane].filter(Boolean),
+    };
   }
 
   function createPackage(parent) {
@@ -1587,10 +2107,11 @@
     door.position = new BABYLON.Vector3(0, 0.32, -0.78);
   }
 
-  function createAsteroid(parent) {
+  function createAsteroid(parent, item = {}) {
+    addTerrainFootprintPads(parent, item, true, [0.45, 0.43, 0.45]);
     const mat = createMat('asteroidMat', [0.45, 0.43, 0.45]);
-    const rock = parentMesh(BABYLON.MeshBuilder.CreatePolyhedron('asteroid', { type: 0, size: 1.2 }, ctx.scene), parent, mat);
-    rock.position.y = 0.75;
+    const rock = parentMesh(BABYLON.MeshBuilder.CreatePolyhedron('asteroid', { type: 0, size: STEP * 0.72 }, ctx.scene), parent, mat);
+    rock.position.y = 0.65;
     rock.scaling.y = 0.85;
     rock.rotation = new BABYLON.Vector3(0.4, 0.2, 0.5);
   }
@@ -1625,7 +2146,63 @@
     return new BABYLON.Color3(c[0], c[1], c[2]);
   }
 
+  function createTerrainSignLabel(parent, guide) {
+    if (!guide) return;
+    const tex = new BABYLON.DynamicTexture(`terrainSign-${parent.name}`, { width: 256, height: 96 }, ctx.scene, false);
+    const ctx2d = tex.getContext();
+    ctx2d.fillStyle = guide.deadly ? 'rgba(32,8,8,0.9)' : 'rgba(8,20,32,0.9)';
+    ctx2d.fillRect(0, 0, 256, 96);
+    ctx2d.strokeStyle = `rgb(${Math.floor(guide.color[0] * 255)},${Math.floor(guide.color[1] * 255)},${Math.floor(guide.color[2] * 255)})`;
+    ctx2d.lineWidth = 4;
+    ctx2d.strokeRect(4, 4, 248, 88);
+    ctx2d.fillStyle = '#f8fafc';
+    ctx2d.font = 'bold 34px "Microsoft YaHei", sans-serif';
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.fillText(guide.title, 128, 34);
+    ctx2d.font = '22px "Microsoft YaHei", sans-serif';
+    ctx2d.fillStyle = '#dbeafe';
+    ctx2d.fillText(guide.subtitle, 128, 68);
+    tex.update();
+    const plane = BABYLON.MeshBuilder.CreatePlane(`terrainSignPlane-${parent.name}`, { width: 1.45, height: 0.52 }, ctx.scene);
+    const mat = new BABYLON.StandardMaterial(`terrainSignMat-${parent.name}`, ctx.scene);
+    mat.diffuseTexture = tex;
+    mat.emissiveTexture = tex;
+    mat.emissiveColor = new BABYLON.Color3(guide.color[0], guide.color[1], guide.color[2]).scale(0.4);
+    mat.backFaceCulling = false;
+    mat.disableLighting = true;
+    mat.useAlphaFromDiffuseTexture = true;
+    plane.material = mat;
+    plane.position.y = 2.35;
+    plane.parent = parent;
+    plane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+    plane.isPickable = false;
+  }
+
+  function getTerrainDisplayGuide(item, theme = currentChapter()?.theme) {
+    if (item.type === 'lava') return { title: '🌋 熔岩', subtitle: '禁止進入', deadly: true, color: [0.95, 0.35, 0.08] };
+    if (item.type === 'heat') return { title: '🌡️ 高溫', subtitle: '可通過·耗電', deadly: false, color: [1, 0.55, 0.15] };
+    if (item.type === 'volcano') return { title: '⛰️ 火山', subtitle: '禁止進入', deadly: true, color: [0.45, 0.28, 0.22] };
+    if (item.type === 'rubble') return { title: '🪨 碎石', subtitle: '可通過·耗電', deadly: false, color: [0.42, 0.36, 0.32] };
+    if (item.type === 'hazard') {
+      if (theme === 'volcano') return { title: '🌋 熔岩', subtitle: '禁止進入', deadly: true, color: [0.95, 0.35, 0.08] };
+      if (theme === 'lab') return { title: '☣️ 汙染', subtitle: '禁止進入', deadly: true, color: [0.2, 0.82, 0.45] };
+      if (theme === 'coast') return { title: '🌊 海浪', subtitle: '禁止進入', deadly: true, color: [0.12, 0.48, 0.88] };
+      if (theme === 'space') return { title: '☄️ 隕石', subtitle: '禁止進入', deadly: true, color: [0.45, 0.43, 0.45] };
+      return { title: '⚠️ 危險', subtitle: '禁止進入', deadly: true, color: [0.9, 0.2, 0.15] };
+    }
+    return null;
+  }
+
   function createObjectLabel(item, parent) {
+    const showLabels = typeof window.isObstacleLabelsVisible === 'function'
+      ? window.isObstacleLabelsVisible()
+      : true;
+    const guide = showLabels ? getTerrainDisplayGuide(item) : null;
+    if (guide) {
+      createTerrainSignLabel(parent, guide);
+      return;
+    }
     const marker = BABYLON.MeshBuilder.CreateBox(`label-${item.label}`, { width: 0.12, height: 0.12, depth: 0.12 }, ctx.scene);
     marker.position.y = 1.55;
     marker.parent = parent;
@@ -1636,6 +2213,37 @@
     const mission = currentMission();
     if (!mission || !MissionFeedback) return [];
     return MissionFeedback.buildObjectives(state, mission, feedbackHelpers());
+  }
+
+  function getCurrentFailCount() {
+    const key = missionKey();
+    return key ? (progress[key]?.fails || 0) : 0;
+  }
+
+  function missionAnswerButtonHtml() {
+    const mission = currentMission();
+    const threshold = window.MissionSolutions?.MISSION_FAIL_ANSWER_THRESHOLD ?? 10;
+    if (getCurrentFailCount() < threshold || !window.MissionSolutions?.hasSolution?.(mission)) return '';
+    return '<button type="button" class="mission-answer-btn" onclick="MissionMode.askShowAnswer()">📖 參考答案</button>';
+  }
+
+  function askShowMissionAnswer() {
+    document.getElementById('missionAnsModal')?.classList.add('show');
+  }
+
+  function applyMissionAnswer() {
+    if (typeof closeModal === 'function') closeModal('missionAnsModal');
+    else document.getElementById('missionAnsModal')?.classList.remove('show');
+    const mission = currentMission();
+    const xml = window.MissionSolutions?.getSolutionXml?.(mission);
+    if (!xml || !ctx?.workspace) {
+      ctx.toast?.('⚠️ 本任務尚未提供參考答案', 'warn');
+      return;
+    }
+    ctx.workspace.clear();
+    Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), ctx.workspace);
+    ctx.toast?.('📖 已載入參考答案，按「開始執行任務」查看結果', 'success');
+    refreshTutorialCheckHint();
   }
 
   function renderGuideDock() {
@@ -1652,6 +2260,10 @@
     const doneCount = items.filter((item) => item.done).length;
     const hint = MissionTutorial?.getHintMeta?.(mission) || { text: mission.goal || '', index: 1, total: 1 };
     const wsHint = tutorialCheckHint;
+    const patrolBtn = missionHasNpcs()
+      ? `<button type="button" class="ghost" onclick="MissionMode.togglePatrolRoutes()">${shouldShowPatrolRoutes() ? '隱藏行人路線' : '顯示行人路線'}</button>`
+      : '';
+    const answerBtn = missionAnswerButtonHtml();
 
     if (!guideExpanded) {
       dock.innerHTML = `
@@ -1666,6 +2278,7 @@
             <span class="mission-guide-chevron">▲</span>
           </button>
           <div class="mission-guide-collapsed-actions">
+            ${answerBtn}
             <button type="button" class="ghost" onclick="MissionMode.openTutorial()">教學</button>
             <button type="button" class="primary" onclick="MissionMode.runWorkspace()">▶ 執行</button>
           </div>
@@ -1690,6 +2303,8 @@
             <button type="button" onclick="MissionTutorial.next()">下一提示</button>
           </div>
           <div class="mission-guide-actions">
+            ${patrolBtn}
+            ${answerBtn}
             <button type="button" class="ghost" onclick="MissionMode.openTutorial()">完整教學卡</button>
             <button type="button" class="primary" onclick="MissionMode.runWorkspace()">開始執行任務</button>
           </div>
@@ -1748,7 +2363,13 @@
     setText('mhBattery', `${Math.max(0, Math.round(state.battery))}%`);
     setText('mhCargo', state.delivered ? '已送達' : state.cargo ? '持有' : '無');
     setText('mhWeather', currentWeatherLabel || '--');
-    setText('mhState', `${label}${state.moves ? ` · ${state.moves}步` : ''}`);
+    let stateLabel = label || '待命';
+    if (npcProximityWarning) stateLabel = `${stateLabel} · ${npcProximityWarning}`;
+    if (mission?.timeLimitSec) {
+      const left = Math.max(0, Math.ceil(mission.timeLimitSec - state.elapsedSec));
+      stateLabel = `${stateLabel} · ⏱${left}s`;
+    }
+    setText('mhState', `${stateLabel}${state.moves ? ` · ${state.moves}步` : ''}`);
     if (refreshBrief) renderGuideDock();
     else {
       const chips = document.querySelector('#missionGuideDock .mission-objective-chips');
@@ -1795,9 +2416,7 @@
   }
 
   function dangerAt(x, z) {
-    const cell = terrainAt(x, z);
-    if (cell?.type === 'lava') return true;
-    return Boolean(objectAt(x, z, ['hazard']));
+    return isDeadlyTerrain(terrainAt(x, z));
   }
 
   function dangerAhead() {
@@ -1807,8 +2426,7 @@
 
   function heatAhead() {
     const vector = forwardVector();
-    const cell = terrainAt(state.x + vector.dx, state.z + vector.dz);
-    return cell?.type === 'heat' || cell?.type === 'lava';
+    return isHeatTerrain(terrainAt(state.x + vector.dx, state.z + vector.dz));
   }
 
   function isAtMissionTarget() {
@@ -1817,11 +2435,45 @@
     return state.x === target.x && state.z === target.z;
   }
 
+  async function buildMenuPreview(previewCtx, chapterIndex = 0, missionIndex = 0) {
+    if (missionMenuPreviewActive) teardownMenuPreview();
+    await loadMissions();
+    await loadAssetManifest();
+    ctx = previewCtx;
+    hideBaseScene();
+    currentChapterIndex = Math.max(0, Math.min(chapters.length - 1, chapterIndex));
+    const chapter = chapters[currentChapterIndex];
+    currentMissionIndex = Math.max(0, Math.min((chapter?.missions?.length || 1) - 1, missionIndex));
+    state = createEmptyState();
+    patrolRoutesVisible = null;
+    missionMenuPreviewActive = true;
+    await buildScene();
+  }
+
+  function teardownMenuPreview() {
+    if (!missionMenuPreviewActive && !root) return;
+    stopObjectivePulseLoop();
+    clearScene();
+    showBaseScene();
+    resetWeatherAtmosphere();
+    setWeatherBadge('');
+    delete document.body.dataset.missionTheme;
+    missionMenuPreviewActive = false;
+  }
+
+  function getMenuPreviewCameraTarget() {
+    if (!missionMenuPreviewActive || !drone) return null;
+    return drone.getAbsolutePosition?.() || drone.position?.clone?.() || drone.position;
+  }
+
   window.MissionMode = {
     enter,
     exit,
     selectChapter,
     selectMission,
+    buildMenuPreview,
+    teardownMenuPreview,
+    getMenuPreviewCameraTarget,
     runWorkspace: () => runWorkspace(),
     reset: () => resetMission(),
     loadStarter: () => loadStarterProgram(),
@@ -1848,11 +2500,15 @@
       MissionTutorial?.showForMission?.(currentMission(), currentChapter(), { showCard: true });
     },
     toggleGuide: (expanded) => toggleGuide(expanded),
+    refreshScene: () => buildScene(),
+    togglePatrolRoutes: (visible) => togglePatrolRoutes(visible),
     toggleMap: (expanded) => toggleMap(expanded),
     toggleLevelBar: (expanded) => toggleMap(expanded),
     renderGuideDock: () => renderGuideDock(),
     refreshGuideHint: () => refreshGuideHint(),
     shareSolution: () => shareSolution(),
+    askShowAnswer: () => askShowMissionAnswer(),
+    applyAnswer: () => applyMissionAnswer(),
   };
 
   function bindWorkspaceTutorialChecks() {
@@ -1935,7 +2591,19 @@
   }
 
   function terrainAt(x, z) {
-    return allSceneObjects().find((item) => item.x === x && item.z === z && item.type !== 'npc');
+    const hits = allSceneObjects().filter((item) => terrainOccupiesCell(item, x, z));
+    if (!hits.length) return null;
+    return hits.sort((a, b) => (TERRAIN_PRIORITY[b.type] || 0) - (TERRAIN_PRIORITY[a.type] || 0))[0];
+  }
+
+  function isDeadlyTerrain(cell) {
+    if (!cell) return false;
+    return cell.type === 'lava' || cell.type === 'hazard' || cell.type === 'volcano';
+  }
+
+  function isHeatTerrain(cell) {
+    if (!cell) return false;
+    return cell.type === 'heat' || cell.type === 'lava';
   }
 
   function isWindZone(x, z) {
@@ -2142,6 +2810,8 @@
     }
     stopRequested = false;
     running = true;
+    missionRunStart = performance.now();
+    state.elapsedSec = 0;
     await buildScene();
     route = MissionRoute?.createEmptyRoute?.() || { points: [], actions: [] };
     MissionRoute?.clearRouteVisual?.(ctx.scene);
@@ -2150,6 +2820,8 @@
     setButtonsBusy(true);
     try {
       await execChain(startBlock);
+      tickMissionTimer();
+      if (checkMissionTimeout()) return;
       lastRoute = route;
       MissionRoute?.renderRoute?.(ctx.scene, root, route, STEP);
       if (checkSuccess()) showResult(true);
@@ -2206,6 +2878,7 @@
         case 'mission_collect': collect(); break;
         case 'mission_sample': sample(); break;
         case 'mission_report': report(); break;
+        case 'mission_open_gate': openGateManual(); break;
         case 'control_repeat': {
           const times = Number(block.getFieldValue('TIMES')) || 1;
           for (let i = 0; i < times && !stopRequested; i++) await execChain(block.getInputTargetBlock('DO'));
@@ -2250,6 +2923,10 @@
     switch (block.type) {
       case 'mission_danger_ahead': return dangerAhead();
       case 'mission_heat_ahead': return heatAhead();
+      case 'mission_gate_closed': return gateClosedAhead();
+      case 'mission_npc_ahead': return npcAhead();
+      case 'mission_wind_ahead': return windAhead();
+      case 'mission_strong_wind_ahead': return strongWindAhead();
       case 'mission_at_task_point': return Boolean(objectAt(state.x, state.z, ['scan', 'pickup', 'dropoff', 'charger', 'collect', 'sample', 'report']));
       case 'mission_battery_low': return state.battery < 30;
       case 'mission_has_cargo': return state.cargo;
@@ -2282,6 +2959,7 @@
     state.landed = true;
     recordRoute('land');
     updateHud('已降落');
+    refreshPhaseProgress();
   }
 
   async function move(forwardSign, sideSign) {
@@ -2294,10 +2972,28 @@
       state.hitHazard = true;
       updateHud('撞入危險區');
       playSound('warning');
-      showResult(false, '無人機進入危險區,任務失敗。');
+      const cell = terrainAt(nx, nz);
+      const failText = cell?.type === 'volcano'
+        ? '無人機撞上火山岩體,任務失敗。'
+        : cell?.type === 'lava'
+          ? '無人機墜入熔岩,任務失敗。'
+          : '無人機進入危險區,任務失敗。';
+      showResult(false, failText);
       return;
     }
     if (checkNpcCollisionAt(nx, nz)) return;
+    if (isGateBlocking(nx, nz)) {
+      updateHud('閘門未開');
+      playSound('warning');
+      const gate = gateActors.find((g) => g.x === nx && g.z === nz);
+      const hint = gate?.item?.opensOn?.includes('scan')
+        ? '請先掃描淨化入口，氣閘門才會開啟！'
+        : gate?.item?.opensOn === 'pickup'
+          ? '請先取貨，通道閘門才會開啟！'
+          : '🚧 閘門未開啟，無法通過';
+      ctx.toast?.(hint, 'warn');
+      return;
+    }
     state.battery = Math.max(0, state.battery - 4);
     const moveDx = nx - state.x;
     const moveDz = nz - state.z;
@@ -2320,6 +3016,12 @@
     if (currentMission()?.autoCollect !== false) autoCollect();
     advanceNpcs();
     checkNpcCollisionAt(state.x, state.z);
+    tickMissionTimer();
+    if (state.hitTimeout) {
+      updateHud('時間到');
+      playSound('missionFail');
+      showResult(false);
+    }
   }
 
   async function turn(angle) {
@@ -2330,6 +3032,12 @@
     recordRoute(angle > 0 ? 'turn-right' : 'turn-left');
     advanceNpcs();
     checkNpcCollisionAt(state.x, state.z);
+    tickMissionTimer();
+    if (state.hitTimeout) {
+      updateHud('時間到');
+      playSound('missionFail');
+      showResult(false);
+    }
   }
 
   function scan() {
@@ -2346,7 +3054,9 @@
     recordRoute(`scan:${item.label}`);
     playSound('scan');
     ctx.toast?.(`📡 已掃描:${item.label}`, 'success');
+    checkGateTriggers('scan', item.label);
     notifyObjectiveMilestone('scan', item.label);
+    refreshPhaseProgress();
   }
 
   function pickup() {
@@ -2359,6 +3069,8 @@
     recordRoute('pickup');
     playSound('pickup');
     ctx.toast?.('📦 已取貨', 'success');
+    checkGateTriggers('pickup');
+    refreshPhaseProgress();
   }
 
   function dropoff() {
@@ -2372,6 +3084,7 @@
     recordRoute('dropoff');
     playSound('dropoff');
     ctx.toast?.('📮 已完成送貨', 'success');
+    refreshPhaseProgress();
   }
 
   function charge() {
@@ -2407,6 +3120,7 @@
     playSound('photo');
     ctx.toast?.('📷 已拍照記錄', 'success');
     updateHud('', { refreshBrief: true });
+    refreshPhaseProgress();
   }
 
   function collect() {
@@ -2452,6 +3166,7 @@
     playSound('pickup');
     ctx.toast?.(`🧪 已採集樣本:${item.label}`, 'success');
     notifyObjectiveMilestone('sample', item.label);
+    refreshPhaseProgress();
   }
 
   function report() {
@@ -2468,14 +3183,16 @@
     recordRoute(`report:${item.label}`);
     playSound('scan');
     ctx.toast?.(`📊 已回報數據:${item.label}`, 'success');
+    checkGateTriggers('report', item.label);
     notifyObjectiveMilestone('report', item.label);
+    refreshPhaseProgress();
   }
 
   function checkSuccess() {
     const mission = currentMission();
     if (!mission) return false;
     const success = mission.success || {};
-    if (state.hitHazard || state.hitNpc) return false;
+    if (state.hitHazard || state.hitNpc || state.hitTimeout) return false;
     if (success.scanAll && state.scans.size < countObjects('scan')) return false;
     if (success.sampleAll && state.samples.size < countObjects('sample')) return false;
     if (success.reportAll && state.reports.size < countObjects('report')) return false;
@@ -2490,9 +3207,30 @@
     return true;
   }
 
+  function showMissionHintModal(text) {
+    const modal = document.getElementById('missionHintModal');
+    const body = document.getElementById('missionHintText');
+    if (!modal || !body || !text) return;
+    body.textContent = text;
+    modal.classList.add('show');
+  }
+
+  function recordMissionFail() {
+    const result = MissionProgress.recordFail({
+      chapters,
+      chapterIndex: currentChapterIndex,
+      missionIndex: currentMissionIndex,
+      progress,
+    });
+    progress = result.progress;
+    return result.failCount;
+  }
+
   function showResult(ok, customText = '') {
+    let failCount = 0;
     if (ok) recordMissionComplete();
     else {
+      failCount = recordMissionFail();
       guideExpanded = true;
       renderGuideDock();
     }
@@ -2520,6 +3258,12 @@
     }
     if (nextBtn) nextBtn.style.display = ok && hasNextMission() ? 'inline-flex' : 'none';
     document.getElementById('missionResultModal')?.classList.add('show');
+    if (!ok) {
+      const threshold = window.MissionSolutions?.MISSION_FAIL_ANSWER_THRESHOLD ?? 10;
+      if (failCount === threshold) ctx.toast?.('📖 已解鎖「參考答案」按鈕!', 'warn');
+      const hint = MissionFeedback?.getProgressiveHint?.(currentMission(), failCount, state, feedbackHelpers());
+      if (hint) showMissionHintModal(hint);
+    }
   }
 
   function hasNextMission() {
@@ -2652,6 +3396,8 @@
     let stars = 1;
     if (state.battery >= (thresholds.battery || 45)) stars++;
     if (state.moves <= (thresholds.moves || 18)) stars++;
+    if (thresholds.blocks && getBlockCount() <= thresholds.blocks) stars++;
+    stars = Math.min(3, stars);
     return '★'.repeat(stars) + '☆'.repeat(3 - stars);
   }
 
@@ -2680,7 +3426,9 @@
     if (!ctx?.workspace) return;
     const mission = currentMission();
     ctx.workspace.clear();
-    const xml = mission?.id === 'campus-1' ? STARTER_TAKEOFF : STARTER_MINIMAL;
+    const xml = (mission?.starterXml && mission.starterXml.trim())
+      ? mission.starterXml.trim()
+      : (mission?.id === 'campus-1' ? STARTER_TAKEOFF : STARTER_MINIMAL);
     Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), ctx.workspace);
   }
 })();

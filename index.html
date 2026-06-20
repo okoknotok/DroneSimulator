@@ -8,90 +8,147 @@
 <script src="/js/firebase-config.js"></script>
 <script type="module" src="/js/firebase-sync.js"></script>
 <link rel=stylesheet href=/styles/main.css>
+<link rel=stylesheet href=/styles/builder-studio.css>
 </head>
 <body>
 
 <div id="startMenu" class="show">
-  <div class="menu-content">
-    <div class="menu-emoji">🚁</div>
-    <h1 class="menu-title">DRONE LAB</h1>
-    <div class="menu-subtitle">無人機編程實驗室</div>
-    <div class="mode-cards">
-      <div class="mode-card programming" onclick="enterMode('programming')">
-        <span class="card-icon">🧩</span>
-        <h2>編程模式</h2>
-        <p>使用 Blockly 積木編程控制無人機,挑戰 18 個關卡(含 3 個 AI 自動駕駛大關)。</p>
-        <div class="card-features">
-          <span class="feature-tag">📘 18 關</span>
-          <span class="feature-tag">🧠 邏輯思維</span>
-          <span class="feature-tag">♾️ 自動巡邏</span>
+  <div class="menu-shell">
+    <aside class="menu-sidebar">
+      <div class="menu-brand">
+        <span class="menu-brand-icon">🚁</span>
+        <div class="menu-brand-text">
+          <div class="menu-brand-title">DRONE LAB</div>
+          <div class="menu-brand-sub">無人機編程實驗室</div>
         </div>
       </div>
-      <div class="mode-card mission" onclick="enterMode('mission')">
-        <span class="card-icon">📚</span>
-        <h2>任務故事模式</h2>
-        <p>進入校園巡邏、災區搜救、農田巡檢、倉庫送貨和太空基地探索,用編程完成情境任務。</p>
-        <div class="card-features">
-          <span class="feature-tag mission-progress">🏁 0/0</span>
-          <span class="feature-tag">📖 故事任務</span>
-          <span class="feature-tag">🎯 情境目標</span>
-          <span class="feature-tag">🏅 任務評級</span>
+      <nav id="menuNavList" class="menu-nav-list" aria-label="遊戲模式"></nav>
+      <div class="menu-sidebar-footer">
+        <button type="button" id="menuUserChip" class="menu-user-chip" onclick="StartMenu.toggleSettings(true)">
+          <span id="menuUserChipLabel">訪客</span>
+          <span class="menu-user-chip-gear" aria-hidden="true">⚙</span>
+        </button>
+        <div class="menu-footer-copy">© Drone Lab · Babylon.js + Blockly</div>
+      </div>
+    </aside>
+    <main id="menuHero" class="menu-hero" data-mode="programming" data-accent="player">
+      <div class="menu-hero-bg" aria-hidden="true"></div>
+      <div class="menu-hero-glow" aria-hidden="true"></div>
+      <div class="menu-hero-layout">
+        <div class="menu-hero-copy">
+          <div class="menu-hero-copy-inner">
+            <div id="menuHeroIcon" class="menu-hero-icon">🧩</div>
+            <h1 id="menuHeroTitle" class="menu-hero-title">編程模式</h1>
+            <p id="menuHeroDesc" class="menu-hero-desc"></p>
+            <div id="menuHeroStats" class="menu-hero-stats"></div>
+            <div id="menuHeroTags" class="menu-hero-tags"></div>
+            <button type="button" id="menuCta" class="menu-cta battle-primary">開始 →</button>
+          </div>
+        </div>
+        <div class="menu-hero-preview" aria-hidden="true">
+          <div class="menu-preview-frame"></div>
         </div>
       </div>
-      <div class="mode-card freeflight" onclick="enterMode('freeflight')">
-        <span class="card-icon">🌃</span>
-        <h2>無盡 Cyberpunk</h2>
-        <p>5 階段越來越誇張的賽博龐克世界!射擊紅球、收集金幣、閃避能量牆,挑戰你的反應極限。</p>
-        <div class="card-features">
-          <span class="feature-tag">🌃 5 種場景</span>
-          <span class="feature-tag">💥 真實子彈</span>
-          <span class="feature-tag">🔥 越來越快</span>
-        </div>
-      </div>
-      <div class="mode-card builder" onclick="enterMode('builder')">
-        <span class="card-icon">🏗️</span>
-        <h2>關卡設計</h2>
-        <p>自己設計關卡!放置障礙物、設定起終點、加寶物,然後分享關卡碼畀同學挑戰。</p>
-        <div class="card-features">
-          <span class="feature-tag">🏗️ 自由設計</span>
-          <span class="feature-tag">📤 分享關卡</span>
-          <span class="feature-tag">📥 匯入挑戰</span>
-        </div>
-      </div>
+    </main>
+  </div>
+  <div id="menuSettingsBackdrop" class="menu-settings-backdrop" onclick="StartMenu.toggleSettings(false)"></div>
+  <aside id="menuSettingsDrawer" class="menu-settings-drawer" aria-label="設定">
+    <div class="menu-settings-head">
+      <strong>設定與身份</strong>
+      <button type="button" class="menu-settings-close" onclick="StartMenu.toggleSettings(false)" aria-label="關閉">✕</button>
     </div>
-    <div class="role-panel">
+    <div class="menu-settings-body">
       <div class="role-header">
         <strong>👤 使用身份</strong>
         <span id="cloudStatus">離線模式</span>
       </div>
       <div class="role-actions">
-        <button onclick="setUserRole('guest')">訪客</button>
-        <button onclick="setUserRole('student')">學生</button>
-        <button onclick="setUserRole('teacher')">老師</button>
+        <button type="button" onclick="setUserRole('guest')">訪客</button>
+        <button type="button" onclick="setUserRole('student')">學生</button>
+        <button type="button" onclick="setUserRole('teacher')">老師</button>
         <input id="classNameInput" placeholder="班級名稱 / Class Code" onchange="setClassName(this.value)">
       </div>
       <div id="roleSummary" class="role-summary">目前：訪客</div>
+      <label class="setting-check">
+        <input id="showObstacleLabelsMenu" type="checkbox" checked onchange="setShowObstacleLabels(this.checked)">
+        顯示地圖障礙物標籤
+      </label>
       <div id="teacherTools" class="teacher-tools">
-        <button onclick="exportProgressCsv()">匯出本機成績 CSV</button>
-        <button onclick="renderLocalLeaderboard()">更新排行榜</button>
+        <button type="button" onclick="exportProgressCsv()">匯出本機成績 CSV</button>
+        <button type="button" onclick="renderLocalLeaderboard()">更新排行榜</button>
         <div id="localLeaderboard" class="local-leaderboard"></div>
       </div>
     </div>
-    <div style="margin-top: 40px; text-align: left; max-width: 800px; background: rgba(255,255,255,0.05); padding: 24px; border-radius: 16px; border: 1px solid rgba(79,195,247,0.3);">
-      <h3 style="color: #4fc3f7; margin-bottom: 16px; font-size: 18px;">📖 模式介紹</h3>
-      <div style="color: #b0c4de; font-size: 14px; line-height: 1.8;">
-        <p style="margin-bottom: 12px;"><strong style="color: #fff;">🧩 編程模式</strong> — 學習無人機編程的入門模式。使用 Blockly 積木拖曳組合程式,控制無人機起飛、移動、轉向,完成 18 個精心設計的關卡。進階關卡還包含 AI 自動巡邏和感測器應用。</p>
-        <p style="margin-bottom: 12px;"><strong style="color: #fff;">📚 任務故事模式</strong> — 用獨立故事任務挑戰無人機應用情境,包括校園巡邏、災區搜救、農田巡檢、倉庫送貨和太空基地探索。</p>
-        <p style="margin-bottom: 12px;"><strong style="color: #fff;">🌃 無盡 Cyberpunk</strong> — 手動操控模式,體驗賽博龐克世界的刺激。使用 WASD 移動、滑鼠射擊紅球、收集金幣、閃避能量牆。5 個階段難度遞增,考驗你的反應和操控技巧。</p>
-        <p><strong style="color: #fff;">🏗️ 關卡設計</strong> — 發揮創意,自己設計關卡!在網格上放置障礙物、檢查點和寶物,設定起終點,然後生成關卡碼分享給同學挑戰。零成本分享,無需伺服器。</p>
-      </div>
-    </div>
-    <div class="menu-footer">© Drone Lab · Powered by Babylon.js + Blockly</div>
-  </div>
+  </aside>
 </div>
 
 <div id="app">
+  <div id="battleChrome" class="battle-chrome">
+    <div id="battleTopbar" class="battle-topbar">
+      <span id="battleRoundChip" class="battle-round-chip"></span>
+      <span id="battleScoreLine" class="battle-score-line"></span>
+      <span id="battleLeadArrow" class="battle-lead-arrow"></span>
+      <span id="battlePhaseChip" class="battle-phase-chip"></span>
+      <span id="battleTopTimer" class="battle-top-timer"></span>
+      <div id="battleTopActions" class="battle-top-actions"></div>
+    </div>
+  </div>
+  <div id="battleLobby" class="battle-lobby"></div>
+  <div id="battleVsSplash" class="battle-vs-splash">
+    <div class="vs-side player">
+      <span class="vs-avatar">🧑‍✈️</span>
+      <strong>你</strong>
+    </div>
+    <div class="vs-mid">VS</div>
+    <div class="vs-side cpu" id="battleVsCpu">
+      <span class="vs-avatar">🤖</span>
+      <strong>AI</strong>
+    </div>
+  </div>
+  <div id="battleResultModal" class="battle-result-modal"></div>
+  <div id="battleDualStack" class="battle-dual-stack">
+    <div class="battle-half cpu-half">
+      <div class="battle-half-blocks battle-cpu-blocks">
+        <div class="battle-cpu-head">
+          <span class="battle-cpu-avatar" aria-hidden="true"></span>
+          <div class="battle-cpu-head-copy">
+            <span id="battleCpuHeadTitle" class="battle-cpu-title">AI 對手</span>
+            <span id="battleCpuHeadSub" class="battle-cpu-sub">分析賽道中</span>
+          </div>
+          <span id="battleCpuBlockCount" class="battle-cpu-count">積木 +0</span>
+          <span id="battleCpuLiveFeed" class="battle-cpu-live-feed">待機中...</span>
+        </div>
+        <div id="battleCpuBlocklyHost" class="battle-cpu-blur-shell">
+          <div id="battleCpuCursor" class="battle-cpu-cursor" aria-hidden="true"></div>
+          <div id="battleCpuBlockly"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="battleRowDivider" class="battle-row-divider" title="拖曳調整上下區域"></div>
+
+  <aside id="builderStudioTools"></aside>
+
   <div id="stage">
+    <div id="battleStageLabels" class="battle-stage-labels" aria-hidden="true">
+      <span class="battle-stage-label cpu">🤖 AI 場景</span>
+      <span class="battle-stage-label player">🧑‍✈️ 你的場景</span>
+    </div>
+    <div id="battleRaceBanners" class="battle-race-banners" aria-hidden="true">
+      <div class="battle-race-banner player">
+        <span class="battle-race-banner-text">🧑‍✈️ 你</span>
+        <span class="battle-race-banner-hint">左側 · 藍色無人機</span>
+      </div>
+      <div class="battle-race-banner cpu">
+        <span class="battle-race-banner-text">🤖 AI</span>
+        <span class="battle-race-banner-hint">右側 · 紅色無人機</span>
+      </div>
+    </div>
+    <div id="battlePlayerZoom" class="battle-scene-zoom">
+      <button type="button" title="放大" onclick="BattleMode.zoomPlayerScene(0.9)">＋</button>
+      <button type="button" title="縮小" onclick="BattleMode.zoomPlayerScene(1.1)">－</button>
+      <button type="button" title="重置視角" onclick="BattleMode.zoomPlayerScene(0)">⟲</button>
+    </div>
     <canvas id="renderCanvas"></canvas>
     
     <button id="backToMenu" onclick="backToMenu()">🏠 返回選單</button>
@@ -174,66 +231,24 @@
       ⌨️ <b>WASD/方向鍵</b> 移動 &nbsp;·&nbsp; <b>Shift</b> 加速衝刺 &nbsp;·&nbsp; 🖱️ <b>左鍵</b> 射擊 <span class="red">紅球</span> &nbsp;·&nbsp; 🟡 撞金幣 &nbsp;·&nbsp; ✨ 吃發光道具
     </div>
 
-    <div id="builderToolbar">
-      <div class="tool-group">
-        <span style="color:#FFBF00;font-weight:700;font-size:12px;margin-right:4px;">🏗️ 設計</span>
+    <div id="battleDock" class="battle-dock" hidden></div>
+    <div id="battleHud" class="battle-hud" hidden></div>
+    <div id="battleAiIntel" class="battle-ai-intel" hidden></div>
+    <div id="battleSplitOverlay" class="battle-split-overlay">
+      <div class="battle-pane player-pane">
+        <div class="battle-pane-label">🧑‍✈️ 你（左側）</div>
+        <div id="battlePlayerStatus" class="battle-pane-status"></div>
+        <div id="battlePlayerPips" class="battle-pips"></div>
       </div>
-      <div class="tool-sep"></div>
-      <div class="tool-group" id="toolBtns"></div>
-      <div class="tool-sep"></div>
-      <div class="tool-group">
-        <button class="tool-btn action" onclick="builderTestRun()">▶ 試玩</button>
-        <button class="tool-btn export" onclick="builderShowShare()">📤 分享</button>
-        <button class="tool-btn danger" onclick="builderClearAll()">🗑️ 清空</button>
-      </div>
-    </div>
-
-    <div id="builderPalette">
-      <div class="pal-title">📦 放置物件</div>
-      <div id="palItems"></div>
-    </div>
-
-    <div id="builderInfo">
-      <div class="info-row"><span>格子</span> <span class="info-val" id="bInfoCell">--</span></div>
-      <div class="info-row"><span>障礙</span> <span class="info-val" id="bInfoObs">0</span></div>
-      <div class="info-row"><span>檢查點</span> <span class="info-val" id="bInfoCp">0</span></div>
-      <div class="info-row"><span>寶物</span> <span class="info-val" id="bInfoTr">0</span></div>
-    </div>
-
-    <div id="builderShareModal">
-      <div class="share-box">
-        <h2>📤 分享關卡</h2>
-        <div class="share-meta">
-          <label>關卡名稱 <input id="builderLevelName" type="text" value="自訂關卡"></label>
-          <label>關卡描述 <textarea id="builderLevelDesc">你設計的關卡</textarea></label>
-          <label>過關目標 <textarea id="builderLevelGoal">到達終點並降落</textarea></label>
-          <label>提示文字 <textarea id="builderLevelHint">用 Blockly 編程到達終點!</textarea></label>
-          <label>最大步數 <input id="builderMaxMoves" type="number" min="0" value="0"></label>
-          <label class="inline-check"><input id="builderRequireCheckpoints" type="checkbox" checked> 必須通過全部檢查點</label>
-          <label class="inline-check"><input id="builderRequireTreasures" type="checkbox" checked> 必須收集全部寶物</label>
-        </div>
-        <div class="share-tabs">
-          <button class="share-tab active" onclick="switchShareTab('code')">🔑 關卡碼</button>
-          <button class="share-tab" onclick="switchShareTab('import')">📥 匯入關卡</button>
-        </div>
-        <div id="shareTabCode">
-          <p>複製以下關卡碼,同學撳「匯入關卡」貼上即可挑戰!</p>
-          <textarea class="share-code" id="shareCodeOut" readonly></textarea>
-          <div class="share-btns">
-            <button class="btn-copy" onclick="copyShareCode()">📋 複製</button>
-            <button class="btn-close-share" onclick="closeBuilderShare()">關閉</button>
-          </div>
-        </div>
-        <div id="shareTabImport" style="display:none">
-          <p>貼上同學的關卡碼,即可匯入並挑戰!</p>
-          <textarea class="share-code" id="shareCodeIn" placeholder="貼上關卡碼..."></textarea>
-          <div class="share-btns">
-            <button class="btn-import" onclick="importShareCode()">📥 匯入</button>
-            <button class="btn-close-share" onclick="closeBuilderShare()">關閉</button>
-          </div>
-        </div>
+      <div class="battle-split-divider"></div>
+      <div class="battle-pane cpu-pane">
+        <div class="battle-pane-label" id="battleCpuLabel">🤖 AI（右側）</div>
+        <div id="battleCpuStatus" class="battle-pane-status"></div>
+        <div id="battleCpuPips" class="battle-pips"></div>
       </div>
     </div>
+    <div id="battleMissionCard" class="battle-mission-card"></div>
+    <div id="battleCountdown" class="battle-countdown"></div>
 
     <div id="missionBottomNav" class="mission-bottom-nav">
       <div id="missionGuideDock" class="mission-guide-dock collapsed"></div>
@@ -353,6 +368,27 @@
       </div>
     </div>
 
+    <div id="missionHintModal" class="modal-overlay">
+      <div class="modal-box hint">
+        <h2>💡 漸進提示</h2>
+        <p id="missionHintText">--</p>
+        <div class="modal-btns">
+          <button class="stay-btn" onclick="closeModal('missionHintModal')">再試一次</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="missionAnsModal" class="modal-overlay">
+      <div class="modal-box hint">
+        <h2>📖 顯示參考答案?</h2>
+        <p>你已經嘗試超過 10 次了，要載入參考答案嗎？</p>
+        <div class="modal-btns">
+          <button class="stay-btn" onclick="closeModal('missionAnsModal')">再試一次</button>
+          <button class="confirm-btn" onclick="MissionMode.applyAnswer()">載入答案</button>
+        </div>
+      </div>
+    </div>
+
     <div id="missionDialogue" class="mission-dialogue">
       <div class="dialogue-avatar" id="dialogueAvatar">指</div>
       <div class="dialogue-content">
@@ -362,10 +398,121 @@
       <button onclick="MissionMode.nextDialogue()">下一句</button>
     </div>
   </div>
+
+  <aside id="builderStudioCard">
+    <div id="builderLvHeader"><span class="lv-title">關卡資訊</span></div>
+    <div id="builderLvBody">
+      <input id="builderLevelName" type="text" value="自訂關卡" placeholder="幫關卡取名字！">
+      <div class="builder-card-field">
+        <label>場景背景</label>
+        <div id="builderScenePicker" class="builder-scene-picker"></div>
+      </div>
+      <div class="builder-diff-stars" id="builderDifficultyStars" aria-label="難度">⭐⭐☆</div>
+      <div id="builderKidHealthTip" class="builder-kid-tip">點格子放東西，然後按「試一下」！</div>
+      <div class="builder-card-field">
+        <label for="builderLevelDesc">故事一句</label>
+        <textarea id="builderLevelDesc" rows="2">你設計的關卡</textarea>
+      </div>
+      <div class="builder-card-field">
+        <label for="builderLevelGoal">過關目標</label>
+        <textarea id="builderLevelGoal" rows="2">到達終點並降落</textarea>
+      </div>
+      <div class="builder-card-field">
+        <label for="builderLevelHint">提示文字</label>
+        <textarea id="builderLevelHint" rows="2">用 Blockly 編程到達終點!</textarea>
+      </div>
+      <div class="builder-card-field">
+        <label for="builderMaxMoves">最大步數（0 = 不限）</label>
+        <input id="builderMaxMoves" type="number" min="0" value="0">
+      </div>
+      <div class="builder-card-checks">
+        <label><input id="builderRequireCheckpoints" type="checkbox" checked> 必須通過全部檢查點</label>
+        <label><input id="builderRequireTreasures" type="checkbox" checked> 必須收集全部寶物</label>
+      </div>
+      <div id="builderToolHint"></div>
+      <div id="builderHealthPanel"></div>
+      <div class="builder-library-head">📚 我的關卡</div>
+      <div id="builderLibraryList"></div>
+    </div>
+  </aside>
+
+  <aside id="builderStudioInfo">
+    <div class="info-row">
+      <span>格子</span><span id="builderStudioCell" class="info-val">--</span>
+      <span>障礙</span><span id="builderStudioObs" class="info-val">0</span>
+    </div>
+    <div class="info-row">
+      <span>檢查點</span><span id="builderStudioCp" class="info-val">0</span>
+      <span>寶物</span><span id="builderStudioTr" class="info-val">0</span>
+    </div>
+  </aside>
+
+  <div id="builderTemplateModal">
+    <div class="builder-template-box">
+      <h2>✨ 開始設計關卡</h2>
+      <p class="builder-template-sub">先選場景，再點模板卡片馬上開始！</p>
+      <div class="builder-scene-section">
+        <h3>選場景</h3>
+        <div id="builderSceneGrid" class="builder-scene-grid"></div>
+      </div>
+      <div class="builder-template-section">
+        <h3>選模板</h3>
+        <div id="builderTemplateGrid" class="builder-template-grid"></div>
+      </div>
+      <button type="button" class="builder-template-skip" onclick="BuilderMode.skipTemplateStart()">先不用，從空白開始</button>
+    </div>
+  </div>
+
+  <div id="builderStudioDock"></div>
+
+  <div id="builderShareModal">
+    <div class="share-box">
+      <h2>📤 分享關卡碼</h2>
+      <div class="share-tabs">
+        <button class="share-tab active" onclick="switchShareTab('code')">🔑 關卡碼</button>
+        <button class="share-tab" onclick="switchShareTab('import')">📥 匯入關卡</button>
+      </div>
+      <div id="shareTabCode">
+        <p>複製以下關卡碼，同學貼上即可挑戰！</p>
+        <textarea class="share-code" id="shareCodeOut" readonly></textarea>
+        <div class="share-btns">
+          <button class="btn-copy" onclick="copyShareCode()">📋 複製</button>
+          <button class="btn-close-share" onclick="closeBuilderShare()">關閉</button>
+        </div>
+      </div>
+      <div id="shareTabImport" style="display:none">
+        <p>貼上同學的關卡碼，即可匯入並挑戰！</p>
+        <textarea class="share-code" id="shareCodeIn" placeholder="貼上關卡碼..."></textarea>
+        <div class="share-btns">
+          <button class="btn-import" onclick="importShareCode()">📥 匯入</button>
+          <button class="btn-close-share" onclick="closeBuilderShare()">關閉</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="builderChallengeModal">
+    <div class="builder-challenge-box">
+      <h2>🎴 挑戰卡</h2>
+      <canvas id="builderChallengeMap" width="220" height="165"></canvas>
+      <div class="builder-challenge-meta">
+        <div id="builderChallengeName">自訂關卡</div>
+        <div id="builderChallengeAuthor">匿名設計師</div>
+        <span id="builderChallengeDifficulty" class="builder-challenge-diff medium">中等</span>
+      </div>
+      <div id="builderChallengeStats"></div>
+      <textarea id="builderChallengeCode" readonly></textarea>
+      <div class="builder-challenge-btns">
+        <button type="button" class="btn-primary" onclick="copyShareCode()">📋 複製關卡碼</button>
+        <button type="button" onclick="closeBuilderChallenge()">關閉</button>
+      </div>
+    </div>
+  </div>
   
   <div id="divider" title="拖曳調整寬度"></div>
   
   <div id="blocksArea">
+    <div id="battleVsStrip" class="battle-vs-strip"></div>
     <div id="blocklyHeader">
       <div class="title">🧩 積木編程</div>
       <div class="actions">
@@ -380,6 +527,10 @@
           <option value="1" selected>標準 1×</option>
           <option value="2">快速 2×</option>
         </select>
+        <label class="setting-check blockly-setting" title="隱藏或顯示障礙物名牌">
+          <input id="showObstacleLabelsPlay" type="checkbox" checked onchange="setShowObstacleLabels(this.checked)">
+          🏷️ 障礙標籤
+        </label>
       </div>
     </div>
     <div id="blocklyDiv"></div>

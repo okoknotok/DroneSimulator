@@ -94,6 +94,22 @@
     return String(stars).split('').filter((char) => char === '★').length;
   }
 
+  function recordFail({ chapters, chapterIndex, missionIndex, progress }) {
+    const chapter = chapters[chapterIndex];
+    const mission = chapter?.missions?.[missionIndex];
+    if (!chapter || !mission) return { progress, failCount: 0 };
+    const key = missionKey(chapter, mission);
+    const previous = progress[key] || {};
+    const failCount = (previous.fails || 0) + 1;
+    progress[key] = {
+      ...previous,
+      fails: failCount,
+      attempts: (previous.attempts || 0) + 1,
+    };
+    saveProgress(progress);
+    return { progress, failCount };
+  }
+
   function recordComplete({ chapters, chapterIndex, missionIndex, progress, stars, moves, battery, blockCount }) {
     const chapter = chapters[chapterIndex];
     const mission = chapter?.missions?.[missionIndex];
@@ -229,6 +245,7 @@
     getTotalProgress,
     getChapterProgress,
     recordComplete,
+    recordFail,
     getAchievementSummary,
     pullFromCloud,
     starCount,

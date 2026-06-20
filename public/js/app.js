@@ -5,12 +5,14 @@ let mode = 'menu';
 
 function enterMode(m) {
   initAudio();
+  disableMenuPreview();
   mode = m;
   document.getElementById('startMenu').classList.remove('show');
   if (m === 'programming') setupProgrammingMode();
   else if (m === 'mission') setupMissionMode();
   else if (m === 'freeflight') setupFreeflightMode();
   else if (m === 'builder') setupBuilderMode();
+  else if (m === 'battle') setupBattleMode();
   setTimeout(() => {
     if (engine) engine.resize();
     if (workspace) Blockly.svgResize(workspace);
@@ -21,19 +23,275 @@ function backToMenu() {
   if (busy) { stopRequested = true; setTimeout(backToMenu, 200); return; }
   if (mode === 'freeflight') stopEndlessGame();
   if (mode === 'builder') teardownBuilderMode();
+  if (mode === 'battle') teardownBattleMode();
+  removeBuilderTestLevel();
   mode = 'menu';
-  document.body.classList.remove('freeflight-mode', 'builder-mode', 'mission-mode');
+  document.body.classList.remove('freeflight-mode', 'builder-mode', 'mission-mode', 'battle-mode');
   hideMissionUI();
   document.getElementById('startMenu').classList.add('show');
+  enableMenuPreview();
+  window.StartMenu?.refreshStats?.();
+  window.StartMenu?.refreshUserChip?.();
+}
+
+const MENU_SCENE_TINTS = {
+  player: [0.05, 0.08, 0.13, 1],
+  gold: [0.06, 0.05, 0.02, 1],
+  cpu: [0.08, 0.04, 0.04, 1],
+  neon: [0.08, 0.03, 0.07, 1],
+  builder: [0.03, 0.07, 0.04, 1],
+};
+const MENU_MODE_ACCENTS = {
+  programming: 'player',
+  mission: 'gold',
+  battle: 'cpu',
+  freeflight: 'neon',
+  builder: 'builder',
+};
+const DEFAULT_SCENE_CLEAR = [0.05, 0.08, 0.13, 1];
+let menuPreviewActive = false;
+let menuPreviewSceneId = null;
+let menuSavedLevel = 0;
+let menuCamAlpha = -Math.PI / 2;
+
+function applyMenuPreviewTint(accent = 'player') {
+  if (!scene) return;
+  const tint = MENU_SCENE_TINTS[accent] || MENU_SCENE_TINTS.player;
+  scene.clearColor = new BABYLON.Color4(tint[0], tint[1], tint[2], tint[3]);
+}
+
+function setProgrammingWorldVisible(visible) {
+  if (defaultFloor) defaultFloor.setEnabled(visible);
+  if (defaultWalls) defaultWalls.forEach((w) => w.setEnabled(visible));
+  if (targetMarker) targetMarker.setEnabled(visible);
+  if (startMarker) startMarker.setEnabled(visible);
+}
+
+function cleanupMenuPreviewWorld() {
+  disposeCpuDrone();
+  window.MissionMode?.teardownMenuPreview?.();
+  clearGameObjects();
+  GAME.active = false;
+  GAME.gameOver = false;
+  GAME.paused = false;
+  GAME.currentStage = 0;
+  rebuildObstacles([]);
+  rebuildCheckpoints([]);
+  rebuildTreasures([]);
+  setProgrammingWorldVisible(true);
+  if (drone?._nose) drone._nose.setEnabled(true);
+  if (scene) scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
+}
+
+function applyLevelPreview(idx) {
+  const lv = LEVELS[Math.max(0, Math.min(LEVELS.length - 1, idx))];
+  startCell = { gx: lv.start.gx, gz: lv.start.gz };
+  targetCell = { gx: lv.target.gx, gz: lv.target.gz };
+  pos = { x: lv.start.gx * STEP, z: lv.start.gz * STEP };
+  dir = lv.start.dir;
+  flying = false;
+  targetProp = 0;
+  crashed = false;
+  if (drone) {
+    drone.position = new BABYLON.Vector3(pos.x, 0.4, pos.z);
+    drone.rotation = new BABYLON.Vector3(0, dirToRotY(dir), 0);
+  }
+  if (targetMarker) updateMarkerPositions();
+  rebuildObstacles(lv.obstacles || []);
+  rebuildCheckpoints(lv.checkpoints || []);
+  rebuildTreasures(lv.treasures || []);
+}
+
+function loadLevelSilent(idx) {
+  applyLevelPreview(idx);
+}
+
+function setupFreeflightPreviewScene() {
+  rebuildObstacles([]);
+  rebuildCheckpoints([]);
+  rebuildTreasures([]);
+  clearGameObjects();
+  GAME.active = false;
+  GAME.gameOver = false;
+  GAME.paused = false;
+  GAME.currentStage = 0;
+  GAME.obstacles = [];
+  GAME.patternQueue = [];
+  scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
+  scene.clearColor = new BABYLON.Color4(SCENE_STAGES[0].sky[0], SCENE_STAGES[0].sky[1], SCENE_STAGES[0].sky[2], 1);
+  setProgrammingWorldVisible(false);
+  if (drone) {
+    drone.position = new BABYLON.Vector3(0, 3, 0);
+    drone.rotation = new BABYLON.Vector3(0, 0, 0);
+    if (drone._nose) drone._nose.setEnabled(false);
+  }
+  flying = false;
+  targetProp = 0.2;
+  createRunnerEnvironment();
+  applyStageVisuals(0, true);
+}
+
+function applyBuilderMenuPreview() {
+  setProgrammingWorldVisible(true);
+  scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
+  if (saveData.builderDraft) {
+    const d = saveData.builderDraft;
+    startCell = { gx: d.s?.gx ?? 0, gz: d.s?.gz ?? 0 };
+    targetCell = { gx: d.t?.gx ?? 4, gz: d.t?.gz ?? -3 };
+    pos = { x: startCell.gx * STEP, z: startCell.gz * STEP };
+    dir = d.s?.dir ?? 0;
+    if (drone) {
+      drone.position = new BABYLON.Vector3(pos.x, 0.4, pos.z);
+      drone.rotation = new BABYLON.Vector3(0, dirToRotY(dir), 0);
+    }
+    rebuildObstacles(d.o || []);
+    rebuildCheckpoints(d.c || []);
+    rebuildTreasures(d.tr || []);
+    if (targetMarker) updateMarkerPositions();
+  } else {
+    applyLevelPreview(0);
+    rebuildObstacles([]);
+    rebuildCheckpoints([]);
+    rebuildTreasures([]);
+  }
+  if (drone?._nose) drone._nose.setEnabled(false);
+}
+
+function getMenuPreviewCtx() {
+  return { scene, camera, drone, defaultFloor, defaultWalls, targetMarker, startMarker };
+}
+
+function getBattleFirstLevelIndex() {
+  return window.BattleMode?.BATTLE_DUELS?.[0]?.levelIndex ?? 1;
+}
+
+async function setupMissionMenuPreview() {
+  const expectedMode = 'mission';
+  await window.MissionMode?.buildMenuPreview?.(getMenuPreviewCtx(), 0, 0);
+  if (menuPreviewSceneId !== expectedMode) {
+    window.MissionMode?.teardownMenuPreview?.();
+  }
+}
+
+async function applyMenuPreviewScene(modeId) {
+  if (!menuPreviewActive || !scene) return;
+  const accent = MENU_MODE_ACCENTS[modeId] || 'player';
+  if (modeId === menuPreviewSceneId) {
+    applyMenuPreviewTint(accent);
+    return;
+  }
+  cleanupMenuPreviewWorld();
+  menuPreviewSceneId = modeId;
+  switch (modeId) {
+    case 'programming':
+      loadLevelSilent(0);
+      if (drone?._nose) drone._nose.setEnabled(true);
+      break;
+    case 'mission':
+      await setupMissionMenuPreview();
+      break;
+    case 'battle': {
+      const battleLevel = getBattleFirstLevelIndex();
+      loadLevelSilent(battleLevel);
+      if (drone?._nose) drone._nose.setEnabled(true);
+      createCpuDrone();
+      if (cpuDrone && drone) {
+        cpuDrone.position.x = drone.position.x + 2.2;
+        cpuDrone.position.z = drone.position.z + 1.2;
+        cpuDrone.position.y = 0.4;
+        cpuDrone.rotation.y = dirToRotY(dir);
+      }
+      break;
+    }
+    case 'freeflight':
+      setupFreeflightPreviewScene();
+      break;
+    case 'builder':
+      applyBuilderMenuPreview();
+      break;
+    default:
+      loadLevelSilent(0);
+      break;
+  }
+  applyMenuPreviewTint(accent);
+}
+
+function enableMenuPreview() {
+  menuPreviewActive = true;
+  menuSavedLevel = currentLevel;
+  document.body.classList.add('menu-open');
+  if (camera && canvas) camera.detachControl(canvas);
+  menuCamAlpha = -Math.PI / 2;
+  const modeId = window.StartMenu?.getSelectedId?.()
+    || document.getElementById('menuHero')?.dataset.mode
+    || 'programming';
+  menuPreviewSceneId = null;
+  void applyMenuPreviewScene(modeId);
+  if (engine) engine.resize();
+}
+
+function disableMenuPreview() {
+  menuPreviewActive = false;
+  document.body.classList.remove('menu-open');
+  cleanupMenuPreviewWorld();
+  menuPreviewSceneId = null;
+  currentLevel = menuSavedLevel;
+  if (scene) {
+    scene.clearColor = new BABYLON.Color4(
+      DEFAULT_SCENE_CLEAR[0],
+      DEFAULT_SCENE_CLEAR[1],
+      DEFAULT_SCENE_CLEAR[2],
+      DEFAULT_SCENE_CLEAR[3],
+    );
+  }
+  flying = false;
+  targetProp = 0;
+  if (drone) {
+    drone.position.y = 0.4;
+    if (drone._nose) drone._nose.setEnabled(true);
+  }
+}
+
+function updateMenuPreview(dt) {
+  if (!menuPreviewActive || !camera) return;
+  menuCamAlpha += dt * 0.00012;
+  camera.alpha = menuCamAlpha;
+  camera.beta = Math.PI / 3.3;
+  const sceneId = menuPreviewSceneId || 'programming';
+  if (sceneId === 'battle') {
+    if (!drone) return;
+    camera.radius = 26;
+    const tx = drone.position.x + (cpuDrone ? 1.1 : 0);
+    camera.setTarget(new BABYLON.Vector3(tx, 0.35, drone.position.z + 0.6));
+  } else if (sceneId === 'mission') {
+    camera.radius = 28;
+    const target = window.MissionMode?.getMenuPreviewCameraTarget?.();
+    if (target) {
+      camera.setTarget(new BABYLON.Vector3(target.x, 0.35, target.z));
+    } else {
+      camera.setTarget(BABYLON.Vector3.Zero());
+    }
+  } else if (sceneId === 'freeflight') {
+    if (!drone) return;
+    camera.radius = 24;
+    camera.setTarget(new BABYLON.Vector3(drone.position.x, 1.2, drone.position.z));
+  } else {
+    if (!drone) return;
+    camera.radius = 20;
+    camera.setTarget(new BABYLON.Vector3(drone.position.x, 0.35, drone.position.z));
+  }
+  if (cpuDrone && sceneId === 'battle') {
+    cpuDrone.position.y = 0.4 + Math.sin(performance.now() * 0.002) * 0.05;
+  }
 }
 
 function hideBuilderUI() {
-  document.getElementById('builderToolbar').classList.remove('show');
-  document.getElementById('builderPalette').classList.remove('show');
-  document.getElementById('builderInfo').classList.remove('show');
-  document.getElementById('builderShareModal').classList.remove('show');
-  if (scene) scene.onPointerObservable.removeCallback(builderPointerObs);
-  builderPointerObs = null;
+  document.getElementById('builderStudioTools')?.classList.remove('show');
+  document.getElementById('builderStudioCard')?.classList.remove('show');
+  document.getElementById('builderStudioInfo')?.classList.remove('show');
+  document.getElementById('builderStudioDock')?.classList.remove('show');
+  document.getElementById('builderShareModal')?.classList.remove('show');
+  document.getElementById('builderChallengeModal')?.classList.remove('show');
 }
 
 function hideMissionUI() {
@@ -43,13 +301,14 @@ function hideMissionUI() {
 }
 
 function isCodingMode() {
-  return mode === 'programming' || mode === 'mission';
+  return mode === 'programming' || mode === 'mission' || mode === 'battle' || builderTestActive;
 }
 
 function setupProgrammingMode() {
   // Clean up builder mode if switching directly
-  if (builderActive) teardownBuilderMode();
-  document.body.classList.remove('freeflight-mode', 'builder-mode', 'mission-mode');
+  if (window.BuilderMode?.isActive?.()) teardownBuilderMode();
+  if (window.BattleMode?.isActive?.()) teardownBattleMode();
+  document.body.classList.remove('freeflight-mode', 'builder-mode', 'mission-mode', 'battle-mode');
   hideBuilderUI();
   hideMissionUI();
   document.getElementById('blocksArea').style.display = 'flex';
@@ -77,8 +336,427 @@ function setupProgrammingMode() {
   loadLevel(currentLevel);
 }
 
+let cpuDrone = null;
+let battlePlayerCamera = null;
+let battleCpuCamera = null;
+let battleSplitActive = false;
+
+let battleViewportLayout = 'horizontal';
+let battleRowSplit = 0.5;
+let battlePlayerCamRadius = 18;
+let battlePlayerCamAlpha = -Math.PI / 2;
+let battlePlayerCamBeta = Math.PI / 3.4;
+let battleRowDrag = false;
+let battleWheelHandler = null;
+let battlePlayerRotateDrag = false;
+let battleLastPointerX = 0;
+let battleLastPointerY = 0;
+let battleRotateHandlers = null;
+
+function destroyBattleCameras() {
+  if (battlePlayerCamera) {
+    battlePlayerCamera.dispose();
+    battlePlayerCamera = null;
+  }
+  if (battleCpuCamera) {
+    battleCpuCamera.dispose();
+    battleCpuCamera = null;
+  }
+}
+
+function applyBattleViewportToCameras() {
+  if (!battlePlayerCamera || !battleCpuCamera) return;
+  if (battleViewportLayout === 'vertical') {
+    const cpuH = battleRowSplit;
+    const playerH = 1 - battleRowSplit;
+    // Babylon viewport 原點在左下：上=AI、下=玩家
+    battleCpuCamera.viewport = new BABYLON.Viewport(0, playerH, 1, cpuH);
+    battlePlayerCamera.viewport = new BABYLON.Viewport(0, 0, 1, playerH);
+  } else {
+    battlePlayerCamera.viewport = new BABYLON.Viewport(0, 0, 0.5, 1);
+    battleCpuCamera.viewport = new BABYLON.Viewport(0.5, 0, 0.5, 1);
+  }
+}
+
+function setBattleRowSplit(ratio) {
+  battleRowSplit = Math.max(0.22, Math.min(0.78, ratio));
+  const app = document.getElementById('app');
+  const chromeH = 52;
+  const totalH = app?.clientHeight || (window.innerHeight - chromeH);
+  const cpuPx = Math.round(totalH * battleRowSplit);
+  document.documentElement.style.setProperty('--battle-cpu-row', `${cpuPx}px`);
+  document.documentElement.style.setProperty('--battle-stage-split', `${battleRowSplit * 100}%`);
+  applyBattleViewportToCameras();
+  if (engine) engine.resize();
+  if (workspace) Blockly.svgResize(workspace);
+  window.BattleCpuCoder?.resize?.();
+}
+
+function isBattlePlayerScenePointer(clientX, clientY) {
+  if (!canvas || mode !== 'battle' || !battleSplitActive || battleViewportLayout !== 'vertical') return false;
+  const rect = canvas.getBoundingClientRect();
+  const yNorm = (clientY - rect.top) / rect.height;
+  return yNorm >= battleRowSplit;
+}
+
+function zoomBattlePlayerCamera(factor) {
+  if (factor === 0) {
+    battlePlayerCamRadius = 18;
+    battlePlayerCamAlpha = -Math.PI / 2;
+    battlePlayerCamBeta = Math.PI / 3.4;
+  } else {
+    battlePlayerCamRadius = Math.max(8, Math.min(42, battlePlayerCamRadius * factor));
+  }
+  if (battlePlayerCamera) {
+    battlePlayerCamera.radius = battlePlayerCamRadius;
+    battlePlayerCamera.alpha = battlePlayerCamAlpha;
+    battlePlayerCamera.beta = battlePlayerCamBeta;
+  }
+}
+
+function bindBattlePlayerSceneRotate() {
+  if (!canvas || battleRotateHandlers) return;
+  const onDown = (e) => {
+    if (e.button !== 0) return;
+    if (!isBattlePlayerScenePointer(e.clientX, e.clientY)) return;
+    battlePlayerRotateDrag = true;
+    battleLastPointerX = e.clientX;
+    battleLastPointerY = e.clientY;
+    canvas.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  };
+  const onMove = (e) => {
+    if (!battlePlayerRotateDrag || !battlePlayerCamera) return;
+    const dx = e.clientX - battleLastPointerX;
+    const dy = e.clientY - battleLastPointerY;
+    battleLastPointerX = e.clientX;
+    battleLastPointerY = e.clientY;
+    battlePlayerCamAlpha -= dx * 0.008;
+    battlePlayerCamBeta = Math.max(0.35, Math.min(1.45, battlePlayerCamBeta - dy * 0.008));
+    battlePlayerCamera.alpha = battlePlayerCamAlpha;
+    battlePlayerCamera.beta = battlePlayerCamBeta;
+  };
+  const endDrag = (e) => {
+    if (!battlePlayerRotateDrag) return;
+    battlePlayerRotateDrag = false;
+    try { canvas.releasePointerCapture?.(e.pointerId); } catch (_) { /* ignore */ }
+  };
+  canvas.addEventListener('pointerdown', onDown);
+  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+  battleRotateHandlers = { onDown, onMove, endDrag };
+}
+
+function unbindBattlePlayerSceneRotate() {
+  if (!canvas || !battleRotateHandlers) return;
+  canvas.removeEventListener('pointerdown', battleRotateHandlers.onDown);
+  canvas.removeEventListener('pointermove', battleRotateHandlers.onMove);
+  canvas.removeEventListener('pointerup', battleRotateHandlers.endDrag);
+  canvas.removeEventListener('pointercancel', battleRotateHandlers.endDrag);
+  battleRotateHandlers = null;
+  battlePlayerRotateDrag = false;
+}
+
+function bindBattleCodingWheel() {
+  if (!canvas || battleWheelHandler) return;
+  battleWheelHandler = (e) => {
+    if (mode !== 'battle' || !battleSplitActive || battleViewportLayout !== 'vertical') return;
+    if (!isBattlePlayerScenePointer(e.clientX, e.clientY)) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    zoomBattlePlayerCamera(e.deltaY > 0 ? 1.08 : 0.92);
+  };
+  canvas.addEventListener('wheel', battleWheelHandler, { passive: false });
+}
+
+function unbindBattleCodingWheel() {
+  if (!canvas || !battleWheelHandler) return;
+  canvas.removeEventListener('wheel', battleWheelHandler);
+  battleWheelHandler = null;
+}
+
+function setupBattleRowDivider() {
+  const divider = document.getElementById('battleRowDivider');
+  const app = document.getElementById('app');
+  if (!divider || !app) return;
+  if (divider._battleRowBound) return;
+  divider._battleRowBound = true;
+
+  const startDrag = (e) => {
+    battleRowDrag = true;
+    divider.classList.add('dragging');
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  };
+  const onDrag = (e) => {
+    if (!battleRowDrag) return;
+    const rect = app.getBoundingClientRect();
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const y = clientY - rect.top;
+    setBattleRowSplit(y / rect.height);
+  };
+  const endDrag = () => {
+    if (!battleRowDrag) return;
+    battleRowDrag = false;
+    divider.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  };
+
+  divider.addEventListener('mousedown', startDrag);
+  divider.addEventListener('touchstart', startDrag, { passive: false });
+  window.addEventListener('mousemove', onDrag);
+  window.addEventListener('touchmove', onDrag, { passive: false });
+  window.addEventListener('mouseup', endDrag);
+  window.addEventListener('touchend', endDrag);
+}
+
+function enterBattleCodingLayout() {
+  setBattleRowSplit(0.5);
+  setupBattleRowDivider();
+  bindBattleCodingWheel();
+  bindBattlePlayerSceneRotate();
+  if (!window._battleCodingResizeBound) {
+    window._battleCodingResizeBound = true;
+    window.addEventListener('resize', onBattleCodingResize);
+  }
+}
+
+function onBattleCodingResize() {
+  if (mode !== 'battle' || battleViewportLayout !== 'vertical') return;
+  setBattleRowSplit(battleRowSplit);
+}
+
+function exitBattleCodingLayout() {
+  unbindBattleCodingWheel();
+  unbindBattlePlayerSceneRotate();
+  document.getElementById('battleRowDivider')?.classList.remove('show');
+}
+
+function ensureBattleCameras() {
+  if (!scene || !camera) return;
+  if (battlePlayerCamera && battleCpuCamera) return;
+  battlePlayerCamera = camera.clone('battlePlayerCam');
+  battleCpuCamera = camera.clone('battleCpuCam');
+  battlePlayerCamera.inputs.clear();
+  battleCpuCamera.inputs.clear();
+  battlePlayerCamera.alpha = battlePlayerCamAlpha;
+  battlePlayerCamera.beta = battlePlayerCamBeta;
+  battlePlayerCamera.radius = battlePlayerCamRadius;
+  applyBattleViewportToCameras();
+}
+
+function setBattleViewportLayout(layout) {
+  const changed = battleViewportLayout !== layout;
+  battleViewportLayout = layout;
+  if (changed) destroyBattleCameras();
+  if (battlePlayerCamera && battleCpuCamera) applyBattleViewportToCameras();
+}
+
+function enableBattleSplitCameras(layout) {
+  if (layout) setBattleViewportLayout(layout);
+  if (!scene || !camera) return;
+  ensureBattleCameras();
+  applyBattleViewportToCameras();
+  camera.detachControl(canvas);
+  camera.setEnabled(false);
+  battlePlayerCamera.setEnabled(true);
+  battleCpuCamera.setEnabled(true);
+  battleSplitActive = true;
+  scene.activeCamera = null;
+  scene.activeCameras = [battleCpuCamera, battlePlayerCamera];
+  if (engine) engine.resize();
+}
+
+function disableBattleSplitCameras() {
+  battleSplitActive = false;
+  if (camera) camera.setEnabled(true);
+  if (battlePlayerCamera) battlePlayerCamera.setEnabled(false);
+  if (battleCpuCamera) battleCpuCamera.setEnabled(false);
+  if (scene) {
+    scene.activeCameras = [];
+    scene.activeCamera = camera;
+  }
+  if (camera && canvas && mode === 'battle') camera.attachControl(canvas, true);
+}
+
+function updateBattleSplitCameras() {
+  if (!battleSplitActive || !battlePlayerCamera || !drone) return;
+  applyBattleViewportToCameras();
+  const targetY = drone.position.y + 1.2;
+  battlePlayerCamera.setTarget(new BABYLON.Vector3(drone.position.x, targetY * 0.35, drone.position.z));
+  battlePlayerCamera.alpha = battlePlayerCamAlpha;
+  battlePlayerCamera.beta = battlePlayerCamBeta;
+  battlePlayerCamera.radius = battlePlayerCamRadius;
+  if (cpuDrone && battleCpuCamera) {
+    battleCpuCamera.setTarget(new BABYLON.Vector3(cpuDrone.position.x, targetY * 0.35, cpuDrone.position.z));
+    battleCpuCamera.alpha = -Math.PI / 2;
+    battleCpuCamera.beta = Math.PI / 3.4;
+    battleCpuCamera.radius = 18;
+  }
+}
+
+function getBattlePlayerSnapshot() {
+  return {
+    stats: { ...levelStats },
+    distance: distanceToTarget(),
+    status: document.getElementById('ps')?.textContent?.trim() || '',
+    flying: Boolean(flying),
+    crashed: Boolean(crashed),
+  };
+}
+
+function setupBattleMode() {
+  if (window.BuilderMode?.isActive?.()) teardownBuilderMode();
+  document.body.classList.add('battle-mode');
+  document.body.classList.remove('freeflight-mode', 'builder-mode', 'mission-mode');
+  hideBuilderUI();
+  hideMissionUI();
+  document.getElementById('blocksArea').style.display = 'flex';
+  document.getElementById('divider').style.display = 'block';
+  document.getElementById('levelPanel').style.display = 'none';
+  document.getElementById('minimap').style.display = 'block';
+  document.getElementById('hud').style.display = 'block';
+  document.getElementById('gameHud').classList.remove('show');
+  document.getElementById('crosshair').classList.remove('show');
+  document.getElementById('gameInstructions').classList.remove('show');
+  if (targetMarker) targetMarker.setEnabled(true);
+  if (startMarker) startMarker.setEnabled(true);
+  if (defaultFloor) defaultFloor.setEnabled(true);
+  if (defaultWalls) defaultWalls.forEach(w => w.setEnabled(true));
+  if (drone && drone._nose) drone._nose.setEnabled(true);
+  if (camera) {
+    camera.attachControl(canvas, true);
+    camera.alpha = -Math.PI / 2;
+    camera.beta = Math.PI / 3.2;
+    camera.radius = 28;
+    camera.setTarget(BABYLON.Vector3.Zero());
+  }
+  scene.clearColor = new BABYLON.Color4(0.05, 0.08, 0.13, 1);
+  scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
+  window.BattleMode?.enter?.({
+    loadLevelIndex: (idx) => loadLevel(idx),
+    getLevel: (idx) => LEVELS[idx],
+    resetDrone: () => resetAll(),
+    runStudentRace,
+    createCpuDrone,
+    updateCpuDrone,
+    disposeCpuDrone,
+    enableSplitCameras: enableBattleSplitCameras,
+    disableSplitCameras: disableBattleSplitCameras,
+    setBattleViewportLayout,
+    setBattleRowSplit,
+    enterBattleCodingLayout,
+    exitBattleCodingLayout,
+    zoomPlayerCamera: zoomBattlePlayerCamera,
+    resizeEngine: () => {
+      if (engine) engine.resize();
+      if (workspace) Blockly.svgResize(workspace);
+    },
+    getPlayerBattleSnapshot: getBattlePlayerSnapshot,
+    saveData,
+    persistSaveData,
+    toast,
+    workspace: () => workspace,
+    loadDefaultBlocks: () => loadDefaultStartBlock(),
+  });
+}
+
+function teardownBattleMode() {
+  disableBattleSplitCameras();
+  exitBattleCodingLayout();
+  destroyBattleCameras();
+  disposeCpuDrone();
+  window.BattleMode?.exit?.();
+}
+
+function createCpuDrone() {
+  disposeCpuDrone();
+  if (!scene) return;
+  cpuDrone = new BABYLON.TransformNode('cpuDrone', scene);
+  const built = buildDroneModel(scene, cpuDrone, 'cpu', {
+    idPrefix: 'cpu',
+    shadowGenerator,
+    propellerSink: cpuPropellers,
+  });
+  cpuDrone._nose = built.nose;
+  cpuDrone.position = new BABYLON.Vector3(pos.x, 0.4, pos.z);
+  cpuDrone.rotation = new BABYLON.Vector3(0, dirToRotY(dir), 0);
+  cpuDrone.setEnabled(true);
+  cpuTargetProp = 0.12;
+}
+
+function updateCpuDrone(x, z, droneDir, isFlying) {
+  if (!cpuDrone) return;
+  cpuDrone.position.x = x;
+  cpuDrone.position.z = z;
+  cpuDrone.position.y = isFlying ? FLY_H : 0.4;
+  cpuDrone.rotation.y = dirToRotY(droneDir);
+  cpuTargetProp = isFlying ? 0.22 : 0.08;
+}
+
+function disposeCpuDrone() {
+  if (!cpuDrone) return;
+  cpuDrone.getChildMeshes().forEach((mesh) => {
+    if (mesh.material) mesh.material.dispose();
+    mesh.dispose();
+  });
+  cpuDrone.dispose();
+  cpuDrone = null;
+  cpuPropellers = [];
+  cpuTargetProp = 0;
+  cpuPropSpeed = 0;
+}
+
+async function runStudentRace() {
+  if (!workspace) return { success: false, moves: 0, blockCount: 0, elapsed: 0, stats: levelStats };
+  const startBlock = workspace.getTopBlocks(true).find(b => b.type === 'event_start');
+  if (!startBlock) {
+    toast('⚠️ 找不到「▶ 當開始執行」', 'warn');
+    return { success: false, moves: 0, blockCount: 0, elapsed: 0, stats: levelStats };
+  }
+  const raceStart = Date.now();
+  resetAll();
+  await sleep(200);
+  busy = true;
+  stopRequested = false;
+  crashed = false;
+  document.getElementById('btnRun').disabled = true;
+  document.getElementById('btnStep').disabled = true;
+  document.getElementById('btnStop').disabled = false;
+  try {
+    await execChain(startBlock);
+  } catch (e) {
+    console.error(e);
+  } finally {
+    busy = false;
+    stopRequested = false;
+    document.getElementById('btnRun').disabled = false;
+    document.getElementById('btnStep').disabled = false;
+    document.getElementById('btnStop').disabled = true;
+    workspace.getAllBlocks().forEach(b => b.removeSelect && b.removeSelect());
+    updateUI();
+  }
+  const lv = LEVELS[currentLevel];
+  const blockCount = window.FlightSimulator?.countBlocks?.(workspace) || 0;
+  const success = !crashed && Boolean(lv?.check?.(levelStats));
+  return {
+    success,
+    moves: levelStats.totalMoves,
+    blockCount,
+    elapsed: (Date.now() - raceStart) / 1000,
+    stats: { ...levelStats },
+    distanceToTarget: distanceToTarget(),
+  };
+}
+
 function setupMissionMode() {
-  if (builderActive) teardownBuilderMode();
+  if (window.BuilderMode?.isActive?.()) teardownBuilderMode();
+  if (window.BattleMode?.isActive?.()) teardownBattleMode();
   document.body.classList.add('mission-mode');
   document.body.classList.remove('freeflight-mode', 'builder-mode');
   hideBuilderUI();
@@ -120,7 +798,7 @@ function setupMissionMode() {
 
 function setupFreeflightMode() {
   // Clean up builder mode if switching directly
-  if (builderActive) teardownBuilderMode();
+  if (window.BuilderMode?.isActive?.()) teardownBuilderMode();
   document.body.classList.add('freeflight-mode');
   document.body.classList.remove('builder-mode', 'mission-mode');
   hideBuilderUI();
@@ -137,7 +815,7 @@ function setupFreeflightMode() {
   if (startMarker) startMarker.setEnabled(false);
   if (defaultFloor) defaultFloor.setEnabled(false);
   if (defaultWalls) defaultWalls.forEach(w => w.setEnabled(false));
-  if (drone && drone._nose) drone._nose.setEnabled(false); // 🔧 Task3:無盡模式隱藏紅色機鼻
+  if (drone && drone._nose) drone._nose.setEnabled(false); // 🔧 Task3:無盡模式隱藏機鼻
   rebuildObstacles([]);
   rebuildCheckpoints([]);
   rebuildTreasures([]);
@@ -545,6 +1223,7 @@ let saveData = loadSaveData();
 let suppressWorkspaceSave = false;
 let blocklySaveTimer = null;
 let executionSpeed = Number(saveData.settings.executionSpeed || 1);
+let showObstacleLabels = saveData.settings.showObstacleLabels !== false;
 let debugStepCursor = null;
 
 function createEmptyStats() { return { tookOff: false, landed: false, atTarget: false, hitObstacle: false, totalMoves: 0, checkpointsVisitedCount: 0, checkpointsVisitedIndices: [], checkpointOrderCorrect: true, treasuresCollectedCount: 0, treasuresCollected: [], }; }
@@ -558,10 +1237,11 @@ function loadSaveData() {
       drafts: parsed.drafts || {},
       builderDraft: parsed.builderDraft || null,
       settings: parsed.settings || {},
+      battleStats: parsed.battleStats || null,
     };
   } catch (error) {
     console.warn('Failed to load local save data', error);
-    return { progress: {}, drafts: {}, builderDraft: null, settings: {} };
+    return { progress: {}, drafts: {}, builderDraft: null, settings: {}, battleStats: null };
   }
 }
 
@@ -674,19 +1354,60 @@ function recordLevelCompletion() {
   persistSaveData();
   refreshLevelSelector();
   renderLocalLeaderboard();
+  window.StartMenu?.refreshStats?.();
   syncProgressToCloud();
   syncSubmissionToCloud('completed');
 }
 
 function resetSavedProgress() {
   if (!confirm('確定要清除本機關卡進度和草稿嗎?')) return;
-  saveData = { progress: {}, drafts: {}, builderDraft: null, settings: {} };
+  const preservedSettings = { ...saveData.settings };
+  saveData = { progress: {}, drafts: {}, builderDraft: null, settings: preservedSettings };
   persistSaveData();
   refreshLevelSelector();
   renderLocalLeaderboard();
   if (workspace) loadDefaultStartBlock();
   toast('🧹 已清除本機進度', 'success');
 }
+
+function isObstacleLabelsVisible() {
+  return showObstacleLabels;
+}
+
+function setShowObstacleLabels(enabled) {
+  showObstacleLabels = Boolean(enabled);
+  saveData.settings.showObstacleLabels = showObstacleLabels;
+  persistSaveData();
+  updateObstacleLabelsUI();
+  refreshObstacleLabelMeshes();
+  toast(showObstacleLabels ? '🏷️ 已顯示障礙物標籤' : '🏷️ 已隱藏障礙物標籤', 'info');
+}
+
+function updateObstacleLabelsUI() {
+  ['showObstacleLabelsMenu', 'showObstacleLabelsPlay'].forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) input.checked = showObstacleLabels;
+  });
+}
+
+function refreshObstacleLabelMeshes() {
+  if (mode === 'programming') {
+    const lv = LEVELS[currentLevel];
+    rebuildObstacles(lv.obstacles || []);
+    rebuildCheckpoints(lv.checkpoints || []);
+    rebuildTreasures(lv.treasures || []);
+  } else if (mode === 'builder' && builderTestActive) {
+    const lv = LEVELS[currentLevel];
+    rebuildObstacles(lv.obstacles || []);
+    rebuildCheckpoints(lv.checkpoints || []);
+    rebuildTreasures(lv.treasures || []);
+  } else if (mode === 'mission') {
+    window.MissionMode?.refreshScene?.();
+  }
+}
+
+window.isObstacleLabelsVisible = isObstacleLabelsVisible;
+window.setShowObstacleLabels = setShowObstacleLabels;
 
 function setExecutionSpeed(value) {
   executionSpeed = Math.max(0.25, Number(value) || 1);
@@ -723,6 +1444,27 @@ function updateRoleUI() {
   if (teacherTools) teacherTools.classList.toggle('show', role === 'teacher');
   if (classInput) classInput.value = className;
   if (cloudStatus) cloudStatus.textContent = window.DroneCloud?.isConfigured ? 'Firebase 已連線' : '離線模式';
+  updateObstacleLabelsUI();
+  window.StartMenu?.refreshUserChip?.();
+}
+
+function getProgrammingMenuStats() {
+  const completed = LEVELS.filter((_, index) => saveData.progress[getLevelKey(index)]?.completed).length;
+  return { completed, total: LEVELS.length };
+}
+
+function getBattleMenuStats() {
+  return saveData.battleStats || { wins: 0, losses: 0, draws: 0, matches: 0 };
+}
+
+function hasBuilderDraft() {
+  return window.BuilderMode?.hasDraft?.() ?? Boolean(saveData.builderDraft);
+}
+
+function getMenuUserLabel() {
+  const role = getRoleLabel(saveData.settings.role || 'guest');
+  const className = saveData.settings.className || '';
+  return className ? `${role} · ${className}` : role;
 }
 
 function getProgressRows() {
@@ -839,7 +1581,7 @@ function loadLevel(idx) {
     drone.rotation = new BABYLON.Vector3(0, dirToRotY(dir), 0);
   }
   if (targetMarker) updateMarkerPositions();
-  recordFlightPoint('load');
+  if (mode !== 'menu') recordFlightPoint('load');
   rebuildObstacles(lv.obstacles || []);
   rebuildCheckpoints(lv.checkpoints || []);
   rebuildTreasures(lv.treasures || []);
@@ -852,9 +1594,16 @@ function loadLevel(idx) {
   document.getElementById('lvPrev').disabled = currentLevel === 0;
   document.getElementById('lvNext').disabled = currentLevel === LEVELS.length - 1;
   document.getElementById('lvSelect').value = currentLevel;
-  if (workspace) restoreBlocklyDraft();
-  updateFailUI(); updateExtrasUI(); updateUI('待機');
-  toast(`📘 載入第 ${currentLevel + 1} 關:${lv.name}`, 'success');
+  if (workspace && mode !== 'menu') {
+    if (mode === 'battle') loadDefaultStartBlock();
+    else restoreBlocklyDraft();
+  }
+  if (mode !== 'menu') {
+    updateFailUI();
+    updateExtrasUI();
+    updateUI('待機');
+    toast(`📘 載入第 ${currentLevel + 1} 關:${lv.name}`, 'success');
+  }
 }
 
 function updateFailUI() {
@@ -904,9 +1653,82 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 // ============================================================
 // 🌿 障礙物 — 加高為「高牆」,確保飛行高度也擋得住(FIX 3)
 // ============================================================
+const OBSTACLE_GUIDE = {
+  vase: { name: '花瓶', icon: '🏺', role: '實心牆 — 撞上即停機', subtitle: '撞上即停機', deadly: true, color: [0.45, 0.65, 0.9] },
+  plant: { name: '盆栽', icon: '🌿', role: '實心牆 — 撞上即停機', subtitle: '撞上即停機', deadly: true, color: [0.15, 0.55, 0.22] },
+  tree: { name: '樹木', icon: '🌳', role: '實心牆 — 撞上即停機', subtitle: '撞上即停機', deadly: true, color: [0.12, 0.48, 0.2] },
+  rock: { name: '岩石', icon: '🪨', role: '實心牆 — 撞上即停機', subtitle: '撞上即停機', deadly: true, color: [0.5, 0.5, 0.5] },
+  crate: { name: '木箱', icon: '📦', role: '實心牆 — 撞上即停機', subtitle: '撞上即停機', deadly: true, color: [0.6, 0.4, 0.2] },
+  electricFence: { name: '電網', icon: '⚡', role: '觸電牆 — 撞上即停機', subtitle: '禁止進入', deadly: true, color: [1, 0.45, 0.1] },
+  laserBeam: { name: '激光', icon: '🔴', role: '致命光束 — 穿越即停機', subtitle: '禁止穿越', deadly: true, color: [1, 0.1, 0.1] },
+  windZone: { name: '風場', icon: '🌪️', role: '不擋路 — 進入後被吹推一格', subtitle: '可通過·吹推', deadly: false, color: [0.35, 0.7, 1] },
+  chargingStation: { name: '充電站', icon: '🔋', role: '可通過 — 經過時補充電量', subtitle: '可通過·補能', deadly: false, color: [0.1, 0.9, 0.45] },
+  noFlyZone: { name: '禁飛區', icon: '🚫', role: '禁入區 — 進入即停機', subtitle: '禁止進入', deadly: true, color: [1, 0.1, 0.15] },
+  checkpoint: { name: '檢查點', icon: '🚩', role: '必須依序飛越經過', subtitle: '依序飛越', deadly: false, color: [1, 0.75, 0.1] },
+  scanPoint: { name: '掃描點', icon: '📡', role: '掃描標記點', subtitle: '飛越掃描', deadly: false, color: [1, 0.75, 0.1] },
+  treasure: { name: '寶石', icon: '💎', role: '飛越收集寶石', subtitle: '飛越收集', deadly: false, color: [1, 0.85, 0.1] },
+};
+
+function createBuilderCellPad(parent, type) {
+  const info = OBSTACLE_GUIDE[type];
+  if (!info) return null;
+  const pad = BABYLON.MeshBuilder.CreateGround(`bPad-${type}`, { width: STEP * 0.94, height: STEP * 0.94 }, scene);
+  pad.position.y = 0.025;
+  pad.parent = parent;
+  const mat = new BABYLON.StandardMaterial(`bPadMat-${type}-${Date.now()}`, scene);
+  mat.diffuseColor = new BABYLON.Color3(info.color[0], info.color[1], info.color[2]);
+  mat.emissiveColor = new BABYLON.Color3(info.color[0] * 0.35, info.color[1] * 0.35, info.color[2] * 0.35);
+  mat.alpha = info.deadly ? 0.42 : 0.28;
+  pad.material = mat;
+  pad.isPickable = false;
+  return pad;
+}
+
+function createBuilderObstacleSign(parent, type) {
+  const info = OBSTACLE_GUIDE[type];
+  if (!info) return null;
+  const tex = new BABYLON.DynamicTexture(`bSign-${type}`, { width: 256, height: 96 }, scene, false);
+  const ctx2d = tex.getContext();
+  ctx2d.fillStyle = info.deadly ? 'rgba(32,8,8,0.9)' : 'rgba(8,20,32,0.9)';
+  ctx2d.fillRect(0, 0, 256, 96);
+  ctx2d.strokeStyle = `rgb(${Math.floor(info.color[0] * 255)},${Math.floor(info.color[1] * 255)},${Math.floor(info.color[2] * 255)})`;
+  ctx2d.lineWidth = 4;
+  ctx2d.strokeRect(4, 4, 248, 88);
+  ctx2d.fillStyle = '#f8fafc';
+  ctx2d.font = 'bold 34px "Microsoft YaHei", sans-serif';
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+  ctx2d.fillText(`${info.icon} ${info.name}`, 128, 34);
+  ctx2d.font = '22px "Microsoft YaHei", sans-serif';
+  ctx2d.fillStyle = '#dbeafe';
+  ctx2d.fillText(info.subtitle || (info.deadly ? '禁止進入' : '可通過'), 128, 68);
+  tex.update();
+  const plane = BABYLON.MeshBuilder.CreatePlane(`bSignPlane-${type}`, { width: 1.35, height: 0.5 }, scene);
+  const mat = new BABYLON.StandardMaterial(`bSignMat-${type}`, scene);
+  mat.diffuseTexture = tex;
+  mat.emissiveTexture = tex;
+  mat.emissiveColor = new BABYLON.Color3(info.color[0], info.color[1], info.color[2]).scale(0.35);
+  mat.backFaceCulling = false;
+  mat.disableLighting = true;
+  mat.useAlphaFromDiffuseTexture = true;
+  plane.material = mat;
+  plane.position.y = 2.2;
+  plane.parent = parent;
+  plane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+  plane.isPickable = false;
+  return plane;
+}
+
+function decorateBuilderObstacle(parent, type) {
+  createBuilderCellPad(parent, type);
+  if (isObstacleLabelsVisible()) {
+    createBuilderObstacleSign(parent, type);
+  }
+}
 function createVase(gx, gz, idx) {
   const parent = new BABYLON.TransformNode('vase' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
+  decorateBuilderObstacle(parent, 'vase');
   const mat = new BABYLON.StandardMaterial('vmat' + idx, scene);
   const blueShade = 0.85 + Math.random() * 0.15;
   mat.diffuseColor = new BABYLON.Color3(blueShade * 0.6, blueShade * 0.8, blueShade);
@@ -927,6 +1749,7 @@ function createVase(gx, gz, idx) {
 function createPlant(gx, gz, idx) {
   const parent = new BABYLON.TransformNode('plant' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
+  decorateBuilderObstacle(parent, 'plant');
   const pot = BABYLON.MeshBuilder.CreateCylinder('pot' + idx, { height: 0.6, diameterTop: 0.75, diameterBottom: 0.55 }, scene);
   pot.position.y = 0.3;
   const pmat = new BABYLON.StandardMaterial('pmat' + idx, scene);
@@ -957,7 +1780,8 @@ function createCheckpoint(cp, idx) {
   const parent = new BABYLON.TransformNode('cp' + idx, scene);
   parent.position = new BABYLON.Vector3(cp.gx * STEP, 0, cp.gz * STEP);
   parent._visited = false;
-  const disc = BABYLON.MeshBuilder.CreateGround('cpD' + idx, { width: STEP*0.8, height: STEP*0.8 }, scene);
+  decorateBuilderObstacle(parent, 'checkpoint');
+  const disc = BABYLON.MeshBuilder.CreateGround('cpD' + idx, { width: STEP * 0.92, height: STEP * 0.92 }, scene);
   const tex = new BABYLON.DynamicTexture('cpT' + idx, { width: 256, height: 256 }, scene, false);
   const ctx = tex.getContext();
   ctx.fillStyle = 'rgba(255,200,40,0.7)'; ctx.beginPath(); ctx.arc(128,128,110,0,Math.PI*2); ctx.fill();
@@ -966,10 +1790,18 @@ function createCheckpoint(cp, idx) {
   const mat = new BABYLON.StandardMaterial('cpM' + idx, scene);
   mat.diffuseTexture = tex; mat.diffuseTexture.hasAlpha = true; mat.useAlphaFromDiffuseTexture = true;
   disc.material = mat; disc.position.y = 0.02; disc.parent = parent;
-  const beam = BABYLON.MeshBuilder.CreateCylinder('cpB' + idx, { height: 3, diameterTop: 0.5, diameterBottom: 0.9 }, scene);
-  beam.position.y = 1.5; beam.parent = parent;
+  const ring = BABYLON.MeshBuilder.CreateTorus('cpRing' + idx, { diameter: STEP * 0.82, thickness: 0.06, tessellation: 24 }, scene);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.08;
+  ring.parent = parent;
+  const rmat = new BABYLON.StandardMaterial('cpRM' + idx, scene);
+  rmat.emissiveColor = new BABYLON.Color3(1, 0.75, 0.1);
+  rmat.alpha = 0.65;
+  ring.material = rmat;
+  const beam = BABYLON.MeshBuilder.CreateCylinder('cpB' + idx, { height: 3.4, diameterTop: 0.35, diameterBottom: 1.05 }, scene);
+  beam.position.y = 1.7; beam.parent = parent;
   const bmat = new BABYLON.StandardMaterial('cpBM' + idx, scene);
-  bmat.diffuseColor = new BABYLON.Color3(1, 0.8, 0.2); bmat.emissiveColor = new BABYLON.Color3(1, 0.7, 0.1); bmat.alpha = 0.25;
+  bmat.diffuseColor = new BABYLON.Color3(1, 0.8, 0.2); bmat.emissiveColor = new BABYLON.Color3(1, 0.7, 0.1); bmat.alpha = 0.3;
   beam.material = bmat;
   parent._beam = beam; parent._disc = disc;
   return parent;
@@ -979,8 +1811,16 @@ function createTreasure(t, idx) {
   const parent = new BABYLON.TransformNode('tr' + idx, scene);
   parent.position = new BABYLON.Vector3(t.gx * STEP, 0, t.gz * STEP);
   parent._collected = false;
-  const gem = BABYLON.MeshBuilder.CreatePolyhedron('gemM' + idx, { type: 1, size: 0.3 }, scene);
-  gem.position.y = 1.2; gem.parent = parent;
+  decorateBuilderObstacle(parent, 'treasure');
+  const pad = BABYLON.MeshBuilder.CreateCylinder('trPad' + idx, { height: 0.08, diameter: STEP * 0.72, tessellation: 24 }, scene);
+  pad.position.y = 0.04;
+  pad.parent = parent;
+  const pmat = new BABYLON.StandardMaterial('trPadMat' + idx, scene);
+  pmat.emissiveColor = new BABYLON.Color3(0.45, 0.38, 0.05);
+  pmat.alpha = 0.55;
+  pad.material = pmat;
+  const gem = BABYLON.MeshBuilder.CreatePolyhedron('gemM' + idx, { type: 1, size: 0.55 }, scene);
+  gem.position.y = 1.35; gem.parent = parent;
   const gmat = new BABYLON.StandardMaterial('gemMat' + idx, scene);
   gmat.diffuseColor = new BABYLON.Color3(1, 0.85, 0.1); gmat.emissiveColor = new BABYLON.Color3(0.6, 0.5, 0.05);
   gem.material = gmat;
@@ -991,22 +1831,30 @@ function createTreasure(t, idx) {
 function createElectricFence(gx, gz, idx) {
   const parent = new BABYLON.TransformNode('ef' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
-  // 兩根柱子
-  const post1 = BABYLON.MeshBuilder.CreateCylinder('efPost1_' + idx, { height: 2.5, diameter: 0.15 }, scene);
-  post1.position = new BABYLON.Vector3(-0.4, 1.25, 0); post1.parent = parent;
-  const post2 = BABYLON.MeshBuilder.CreateCylinder('efPost2_' + idx, { height: 2.5, diameter: 0.15 }, scene);
-  post2.position = new BABYLON.Vector3(0.4, 1.25, 0); post2.parent = parent;
+  decorateBuilderObstacle(parent, 'electricFence');
+  const span = STEP * 0.82;
+  const post1 = BABYLON.MeshBuilder.CreateCylinder('efPost1_' + idx, { height: 2.8, diameter: 0.2 }, scene);
+  post1.position = new BABYLON.Vector3(-span / 2, 1.4, 0); post1.parent = parent;
+  const post2 = BABYLON.MeshBuilder.CreateCylinder('efPost2_' + idx, { height: 2.8, diameter: 0.2 }, scene);
+  post2.position = new BABYLON.Vector3(span / 2, 1.4, 0); post2.parent = parent;
   const postMat = new BABYLON.StandardMaterial('efPostMat' + idx, scene);
   postMat.diffuseColor = new BABYLON.Color3(0.3, 0.3, 0.3);
   post1.material = postMat; post2.material = postMat;
-  // 電線（發光）
-  for (let i = 0; i < 3; i++) {
-    const wire = BABYLON.MeshBuilder.CreateCylinder('efWire' + idx + '_' + i, { height: 0.8, diameter: 0.03 }, scene);
-    wire.position = new BABYLON.Vector3(0, 0.6 + i * 0.6, 0);
+  const wall = BABYLON.MeshBuilder.CreatePlane('efWall' + idx, { width: span, height: 2.2 }, scene);
+  wall.position = new BABYLON.Vector3(0, 1.2, 0);
+  wall.parent = parent;
+  const wallMat = new BABYLON.StandardMaterial('efWallMat' + idx, scene);
+  wallMat.emissiveColor = new BABYLON.Color3(1, 0.35, 0.05);
+  wallMat.diffuseColor = new BABYLON.Color3(1, 0.2, 0);
+  wallMat.alpha = 0.55;
+  wall.material = wallMat;
+  for (let i = 0; i < 4; i++) {
+    const wire = BABYLON.MeshBuilder.CreateCylinder('efWire' + idx + '_' + i, { height: span * 0.95, diameter: 0.05 }, scene);
+    wire.position = new BABYLON.Vector3(0, 0.55 + i * 0.5, 0);
     wire.rotation.z = Math.PI / 2;
     wire.parent = parent;
     const wireMat = new BABYLON.StandardMaterial('efWireMat' + idx + '_' + i, scene);
-    wireMat.emissiveColor = new BABYLON.Color3(1, 0.3, 0.1);
+    wireMat.emissiveColor = new BABYLON.Color3(1, 0.45, 0.1);
     wireMat.diffuseColor = new BABYLON.Color3(1, 0.2, 0);
     wire.material = wireMat;
   }
@@ -1016,41 +1864,49 @@ function createElectricFence(gx, gz, idx) {
 function createLaserBeam(gx, gz, idx, direction = 'horizontal') {
   const parent = new BABYLON.TransformNode('lb' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
-  // 發射器
-  const emitter = BABYLON.MeshBuilder.CreateBox('lbEmitter' + idx, { width: 0.3, height: 0.3, depth: 0.3 }, scene);
-  emitter.position.y = 1.5; emitter.parent = parent;
+  decorateBuilderObstacle(parent, 'laserBeam');
+  const emitter = BABYLON.MeshBuilder.CreateBox('lbEmitter' + idx, { width: 0.45, height: 0.45, depth: 0.45 }, scene);
+  emitter.position.y = 1.55; emitter.parent = parent;
   const emitMat = new BABYLON.StandardMaterial('lbEmitMat' + idx, scene);
   emitMat.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.2);
   emitMat.emissiveColor = new BABYLON.Color3(1, 0, 0);
   emitter.material = emitMat;
-  // 激光束
-  const beamLen = direction === 'horizontal' ? 2.5 : 2.5;
-  const beam = BABYLON.MeshBuilder.CreateCylinder('lbBeam' + idx, { height: beamLen, diameter: 0.08 }, scene);
-  beam.position.y = 1.5;
+  const beamLen = STEP * 1.65;
+  const beam = BABYLON.MeshBuilder.CreateCylinder('lbBeam' + idx, { height: beamLen, diameter: 0.16 }, scene);
+  beam.position.y = 1.55;
   beam.rotation.z = direction === 'horizontal' ? Math.PI / 2 : 0;
   beam.parent = parent;
   const beamMat = new BABYLON.StandardMaterial('lbBeamMat' + idx, scene);
   beamMat.emissiveColor = new BABYLON.Color3(1, 0, 0);
   beamMat.diffuseColor = new BABYLON.Color3(1, 0, 0);
-  beamMat.alpha = 0.7;
+  beamMat.alpha = 0.82;
   beam.material = beamMat;
+  const warn = BABYLON.MeshBuilder.CreateGround('lbWarn' + idx, {
+    width: direction === 'horizontal' ? beamLen : STEP * 0.85,
+    height: direction === 'horizontal' ? STEP * 0.85 : beamLen,
+  }, scene);
+  warn.position.y = 0.04;
+  warn.parent = parent;
+  const warnMat = new BABYLON.StandardMaterial('lbWarnMat' + idx, scene);
+  warnMat.emissiveColor = new BABYLON.Color3(0.9, 0.05, 0.05);
+  warnMat.alpha = 0.35;
+  warn.material = warnMat;
   return parent;
 }
 
 function createWindZone(gx, gz, idx, direction = 'east') {
   const parent = new BABYLON.TransformNode('wz' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
-  // 風力場區域（半透明）
-  const zone = BABYLON.MeshBuilder.CreateBox('wzZone' + idx, { width: STEP * 0.9, height: 3, depth: STEP * 0.9 }, scene);
-  zone.position.y = 1.5; zone.parent = parent;
+  decorateBuilderObstacle(parent, 'windZone');
+  const zone = BABYLON.MeshBuilder.CreateBox('wzZone' + idx, { width: STEP * 0.94, height: 3.2, depth: STEP * 0.94 }, scene);
+  zone.position.y = 1.6; zone.parent = parent;
   const zoneMat = new BABYLON.StandardMaterial('wzZoneMat' + idx, scene);
   zoneMat.diffuseColor = new BABYLON.Color3(0.5, 0.8, 1);
   zoneMat.emissiveColor = new BABYLON.Color3(0.3, 0.6, 1);
-  zoneMat.alpha = 0.2;
+  zoneMat.alpha = 0.28;
   zone.material = zoneMat;
-  // 風向箭頭
-  const arrow = BABYLON.MeshBuilder.CreateCylinder('wzArrow' + idx, { height: 0.8, diameterTop: 0.1, diameterBottom: 0.3 }, scene);
-  arrow.position.y = 1.5; arrow.parent = parent;
+  const arrow = BABYLON.MeshBuilder.CreateCylinder('wzArrow' + idx, { height: 1.1, diameterTop: 0.08, diameterBottom: 0.38 }, scene);
+  arrow.position.y = 1.6; arrow.parent = parent;
   if (direction === 'east') arrow.rotation.z = -Math.PI / 2;
   else if (direction === 'west') arrow.rotation.z = Math.PI / 2;
   else if (direction === 'north') arrow.rotation.x = Math.PI / 2;
@@ -1064,6 +1920,7 @@ function createWindZone(gx, gz, idx, direction = 'east') {
 function createTree(gx, gz, idx) {
   const parent = new BABYLON.TransformNode('tree' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
+  decorateBuilderObstacle(parent, 'tree');
   // 樹幹
   const trunk = BABYLON.MeshBuilder.CreateCylinder('trunk' + idx, { height: 2.5, diameterTop: 0.3, diameterBottom: 0.5 }, scene);
   trunk.position.y = 1.25; trunk.parent = parent;
@@ -1090,8 +1947,8 @@ function createTree(gx, gz, idx) {
 function createRock(gx, gz, idx) {
   const parent = new BABYLON.TransformNode('rock' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
-  // 主岩石
-  const mainRock = BABYLON.MeshBuilder.CreatePolyhedron('mainRock' + idx, { type: 0, size: 0.6 }, scene);
+  decorateBuilderObstacle(parent, 'rock');
+  const mainRock = BABYLON.MeshBuilder.CreatePolyhedron('mainRock' + idx, { type: 0, size: 0.82 }, scene);
   mainRock.position.y = 0.8; mainRock.parent = parent;
   mainRock.scaling.y = 0.7;
   const rockMat = new BABYLON.StandardMaterial('rockMat' + idx, scene);
@@ -1110,8 +1967,8 @@ function createRock(gx, gz, idx) {
 function createCrate(gx, gz, idx) {
   const parent = new BABYLON.TransformNode('crate' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
-  // 木箱
-  const box = BABYLON.MeshBuilder.CreateBox('crateBox' + idx, { width: 1.2, height: 1.2, depth: 1.2 }, scene);
+  decorateBuilderObstacle(parent, 'crate');
+  const box = BABYLON.MeshBuilder.CreateBox('crateBox' + idx, { width: STEP * 0.78, height: STEP * 0.78, depth: STEP * 0.78 }, scene);
   box.position.y = 0.6; box.parent = parent;
   const crateMat = new BABYLON.StandardMaterial('crateMat' + idx, scene);
   crateMat.diffuseColor = new BABYLON.Color3(0.6, 0.4, 0.2);
@@ -1138,29 +1995,44 @@ function createCrate(gx, gz, idx) {
 function createChargingStation(gx, gz, idx) {
   const parent = new BABYLON.TransformNode('charge' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
-  const pad = BABYLON.MeshBuilder.CreateCylinder('chargePad' + idx, { height: 0.08, diameter: 1.2, tessellation: 32 }, scene);
-  pad.position.y = 0.04; pad.parent = parent;
+  decorateBuilderObstacle(parent, 'chargingStation');
+  const pad = BABYLON.MeshBuilder.CreateCylinder('chargePad' + idx, { height: 0.1, diameter: STEP * 0.88, tessellation: 32 }, scene);
+  pad.position.y = 0.05; pad.parent = parent;
   const mat = new BABYLON.StandardMaterial('chargeMat' + idx, scene);
   mat.diffuseColor = new BABYLON.Color3(0.1, 0.9, 0.45);
-  mat.emissiveColor = new BABYLON.Color3(0.02, 0.45, 0.18);
+  mat.emissiveColor = new BABYLON.Color3(0.05, 0.55, 0.28);
   pad.material = mat;
-  const bolt = BABYLON.MeshBuilder.CreateBox('chargeBolt' + idx, { width: 0.35, height: 0.7, depth: 0.08 }, scene);
-  bolt.position.y = 0.55; bolt.rotation.z = 0.35; bolt.parent = parent; bolt.material = mat;
+  const ring = BABYLON.MeshBuilder.CreateTorus('chargeRing' + idx, { diameter: STEP * 0.72, thickness: 0.06, tessellation: 24 }, scene);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.12;
+  ring.parent = parent;
+  ring.material = mat;
+  const bolt = BABYLON.MeshBuilder.CreateBox('chargeBolt' + idx, { width: 0.5, height: 0.95, depth: 0.1 }, scene);
+  bolt.position.y = 0.72; bolt.rotation.z = 0.35; bolt.parent = parent; bolt.material = mat;
   return parent;
 }
 
 function createNoFlyZone(gx, gz, idx) {
   const parent = new BABYLON.TransformNode('nofly' + idx, scene);
   parent.position = new BABYLON.Vector3(gx * STEP, 0, gz * STEP);
-  const zone = BABYLON.MeshBuilder.CreateBox('noflyBox' + idx, { width: STEP * 0.9, height: 0.04, depth: STEP * 0.9 }, scene);
-  zone.position.y = 0.03; zone.parent = parent;
+  decorateBuilderObstacle(parent, 'noFlyZone');
+  const zone = BABYLON.MeshBuilder.CreateBox('noflyBox' + idx, { width: STEP * 0.94, height: 0.06, depth: STEP * 0.94 }, scene);
+  zone.position.y = 0.04; zone.parent = parent;
   const mat = new BABYLON.StandardMaterial('noflyMat' + idx, scene);
   mat.diffuseColor = new BABYLON.Color3(1, 0.08, 0.15);
-  mat.emissiveColor = new BABYLON.Color3(0.55, 0.02, 0.05);
-  mat.alpha = 0.62;
+  mat.emissiveColor = new BABYLON.Color3(0.65, 0.02, 0.05);
+  mat.alpha = 0.72;
   zone.material = mat;
-  const pole = BABYLON.MeshBuilder.CreateCylinder('noflyPole' + idx, { height: 1.6, diameter: 0.08 }, scene);
-  pole.position.y = 0.8; pole.parent = parent; pole.material = mat;
+  [-1, 1].forEach((side, i) => {
+    const pole = BABYLON.MeshBuilder.CreateCylinder(`noflyPole${i}`, { height: 2.1, diameter: 0.1 }, scene);
+    pole.position = new BABYLON.Vector3(side * STEP * 0.38, 1.05, 0);
+    pole.parent = parent;
+    pole.material = mat;
+    const bar = BABYLON.MeshBuilder.CreateBox(`noflyBar${i}`, { width: STEP * 0.82, height: 0.08, depth: 0.08 }, scene);
+    bar.position = new BABYLON.Vector3(0, 1.75, 0);
+    bar.parent = parent;
+    bar.material = mat;
+  });
   return parent;
 }
 
@@ -1203,16 +2075,69 @@ function rebuildTreasures(list) {
   list.forEach((t, i) => { treasureMeshes.push(createTreasure(t, i)); });
 }
 
+function getLevelObstacles() {
+  if (!isCodingMode()) return [];
+  return LEVELS[currentLevel]?.obstacles || [];
+}
+
+function obstacleOccupiesCell(o, gx, gz) {
+  if (!o) return false;
+  if (o.gx === gx && o.gz === gz) return true;
+  if (o.type === 'laserBeam') {
+    const dir = o.direction || 'horizontal';
+    if (dir === 'horizontal') return o.gz === gz && Math.abs(o.gx - gx) === 1;
+    return o.gx === gx && Math.abs(o.gz - gz) === 1;
+  }
+  return false;
+}
+
+function getObstacleAt(gx, gz, list = null) {
+  const obstacles = list || getLevelObstacles();
+  return obstacles.find((o) => obstacleOccupiesCell(o, gx, gz)) || null;
+}
+
+function isSolidObstacleType(type) {
+  return Boolean(type) && type !== 'chargingStation' && type !== 'windZone';
+}
+
+function isSolidObstacleAt(gx, gz) {
+  const obstacle = getObstacleAt(gx, gz);
+  return isSolidObstacleType(obstacle?.type || null);
+}
+
+function getWindZoneAt(gx, gz) {
+  return getLevelObstacles().find((o) => o.type === 'windZone' && o.gx === gx && o.gz === gz) || null;
+}
+
+const WIND_PUSH = {
+  east: { dx: 1, dz: 0, label: '東' },
+  west: { dx: -1, dz: 0, label: '西' },
+  north: { dx: 0, dz: 1, label: '北' },
+  south: { dx: 0, dz: -1, label: '南' },
+};
+
+function obstacleHitMessage(type) {
+  const msgs = {
+    vase: '🏺 撞上花瓶高牆,無人機停機!',
+    plant: '🌿 撞上盆栽高叢,無人機停機!',
+    tree: '🌳 撞上樹木,無人機停機!',
+    rock: '🪨 撞上岩石,無人機停機!',
+    crate: '📦 撞上木箱,無人機停機!',
+    electricFence: '⚡ 觸電!無人機停機!',
+    laserBeam: '🔴 撞上激光,無人機停機!',
+    noFlyZone: '🚫 進入禁飛區,無人機停機!',
+  };
+  return msgs[type] || '🚫 撞上障礙物,無人機停機!';
+}
+
 function isObstacleAt(gx, gz) {
   if (!isCodingMode()) return false;
-  const lv = LEVELS[currentLevel];
-  return (lv.obstacles || []).some(o => o.gx === gx && o.gz === gz && o.type !== 'chargingStation');
+  return isSolidObstacleAt(gx, gz);
 }
 function getObstacleTypeAt(gx, gz) {
   if (!isCodingMode()) return null;
-  const lv = LEVELS[currentLevel];
-  const o = (lv.obstacles || []).find(o => o.gx === gx && o.gz === gz);
-  return o ? (o.type || 'vase') : null;
+  const obstacle = getObstacleAt(gx, gz);
+  return obstacle ? (obstacle.type || 'vase') : null;
 }
 
 function checkSpecialObjectAt(gx, gz) {
@@ -1403,6 +2328,10 @@ const HALF = STEP / 2;                       // 🔧 FIX 1: 半格偏移,讓物�
 const FLOOR_W = GRID_W * STEP, FLOOR_D = GRID_D * STEP;
 const FLY_H = 2.5;
 let canvas, engine, scene, camera, drone, propellers = [];
+let shadowGenerator = null;
+let cpuPropellers = [];
+let cpuTargetProp = 0;
+let cpuPropSpeed = 0;
 let pos = { x: 0, z: 0 }, dir = 0;
 let flying = false, busy = false, propSpeed = 0, targetProp = 0;
 let stopRequested = false;
@@ -1436,6 +2365,7 @@ function init3D() {
   dirL.orthoTop = 8; dirL.orthoBottom = -8;
   const sg = new BABYLON.ShadowGenerator(1024, dirL);
   sg.useBlurExponentialShadowMap = true;
+  shadowGenerator = sg;
   createGridFloor(); createWalls(); createMarkers(); createDrone(sg);
   
   canvas.addEventListener('pointerdown', (e) => {
@@ -1457,11 +2387,18 @@ function init3D() {
     }
     propSpeed += (targetProp - propSpeed) * 0.08;
     propellers.forEach((p,i) => p.rotation.y += propSpeed * (i%2===0?1:-1));
+    if (cpuPropellers.length) {
+      const cpuTarget = cpuTargetProp || (menuPreviewActive && menuPreviewSceneId === 'battle' ? 0.12 : 0);
+      cpuPropSpeed += (cpuTarget - cpuPropSpeed) * 0.08;
+      cpuPropellers.forEach((p, i) => p.rotation.y += cpuPropSpeed * (i % 2 === 0 ? 1 : -1));
+    }
     if (targetRing) { targetRing.rotation.y += 0.02; targetRing.position.y = 0.05 + Math.sin(performance.now()*0.003)*0.05; }
     const t = performance.now() * 0.002;
     checkpointMeshes.forEach((cp, i) => { if (cp._beam && !cp._visited) { cp._beam.scaling.x = 1 + Math.sin(t + i) * 0.1; cp._beam.scaling.z = 1 + Math.sin(t + i) * 0.1; } });
     treasureMeshes.forEach((tr, i) => { if (tr._gem && !tr._collected) { tr._gem.rotation.y += 0.04; tr._gem.rotation.x += 0.02; tr._gem.position.y = 1.2 + Math.sin(t * 2 + i) * 0.2; } });
     if (mode === 'freeflight' && GAME.active && !GAME.paused) updateEndlessGame(dt);
+    if (battleSplitActive) updateBattleSplitCameras();
+    if (menuPreviewActive) updateMenuPreview(dt);
     scene.render();
     if (isCodingMode()) drawMinimap();
   });
@@ -1540,66 +2477,146 @@ function updateMarkerPositions() {
   targetMarker.position.x = t.x; targetMarker.position.z = t.z;
 }
 
-function createDrone(sg) {
-  drone = new BABYLON.TransformNode('drone', scene);
+const DRONE_VARIANTS = {
+  player: {
+    body: { diffuse: [0.12, 0.28, 0.52], emissive: [0.04, 0.12, 0.28], specular: [0.5, 0.75, 0.95] },
+    dome: { diffuse: [0.1, 0.5, 0.9], emissive: [0.1, 0.35, 0.7], alpha: 0.7 },
+    nose: { diffuse: [0.2, 0.55, 0.98], emissive: [0.15, 0.4, 0.85] },
+    strip: { emissive: [0.3, 0.9, 1] },
+    thrust: { emissive: [0.4, 0.7, 1], diffuse: [0.3, 0.5, 0.9] },
+    ledFront: [0.3, 0.75, 1],
+    ledRear: [0.25, 1, 0.4],
+  },
+  cpu: {
+    body: { diffuse: [0.45, 0.12, 0.12], emissive: [0.35, 0.08, 0.08], specular: [0.6, 0.35, 0.35] },
+    dome: { diffuse: [0.95, 0.25, 0.2], emissive: [0.55, 0.1, 0.1], alpha: 0.75 },
+    nose: { diffuse: [0.98, 0.35, 0.3], emissive: [0.65, 0.15, 0.12] },
+    strip: { emissive: [1, 0.35, 0.3] },
+    thrust: { emissive: [0.9, 0.35, 0.25], diffuse: [0.55, 0.15, 0.12] },
+    ledFront: [1, 0.35, 0.3],
+    ledRear: [1, 0.55, 0.15],
+  },
+};
+
+function droneColor3(rgb) {
+  return new BABYLON.Color3(rgb[0], rgb[1], rgb[2]);
+}
+
+function buildDroneModel(sceneRef, parent, variant = 'player', options = {}) {
+  const palette = DRONE_VARIANTS[variant] || DRONE_VARIANTS.player;
+  const prefix = options.idPrefix || variant;
+  const propellerSink = options.propellerSink || propellers;
   const meshes = [];
-  const body = BABYLON.MeshBuilder.CreateCylinder('body', { height: 0.25, diameter: 1.05, tessellation: 6 }, scene);
-  body.parent = drone;
-  const bm = new BABYLON.StandardMaterial('bm', scene);
-  bm.diffuseColor = new BABYLON.Color3(0.18, 0.22, 0.32);
-  bm.specularColor = new BABYLON.Color3(0.6, 0.7, 0.85);
-  body.material = bm; meshes.push(body);
-  const lowerHull = BABYLON.MeshBuilder.CreateCylinder('lh', { height: 0.15, diameterTop: 1.0, diameterBottom: 0.7, tessellation: 6 }, scene);
-  lowerHull.position.y = -0.2; lowerHull.parent = drone; lowerHull.material = bm; meshes.push(lowerHull);
-  const dome = BABYLON.MeshBuilder.CreateSphere('dome', { diameter: 0.62, slice: 0.5 }, scene);
-  dome.position.y = 0.12; dome.parent = drone;
-  const dm = new BABYLON.StandardMaterial('dm', scene);
-  dm.diffuseColor = new BABYLON.Color3(0.1, 0.5, 0.9);
-  dm.emissiveColor = new BABYLON.Color3(0.1, 0.35, 0.7);
-  dm.alpha = 0.7; dm.specularColor = new BABYLON.Color3(1, 1, 1);
-  dome.material = dm; meshes.push(dome);
-  const nose = BABYLON.MeshBuilder.CreateCylinder('nose', { height: 0.55, diameterTop: 0.02, diameterBottom: 0.22 }, scene);
-  nose.position = new BABYLON.Vector3(0.7, 0, 0); nose.rotation.z = -Math.PI / 2; nose.parent = drone;
-  const nm = new BABYLON.StandardMaterial('nm', scene);
-  nm.diffuseColor = new BABYLON.Color3(0.95, 0.2, 0.2);
-  nm.emissiveColor = new BABYLON.Color3(0.55, 0.1, 0.1);
-  nose.material = nm; meshes.push(nose);
-  drone._nose = nose; // 🔧 Task3:供 Cyberpunk 模式隱藏
-  const strip = BABYLON.MeshBuilder.CreateBox('strip', { width: 0.04, height: 0.06, depth: 0.85 }, scene);
-  strip.position = new BABYLON.Vector3(0, 0.15, 0); strip.parent = drone;
-  const sm = new BABYLON.StandardMaterial('strpm', scene);
-  sm.emissiveColor = new BABYLON.Color3(0.3, 0.9, 1);
-  strip.material = sm; meshes.push(strip);
-  const thrust = BABYLON.MeshBuilder.CreateCylinder('thrust', { height: 0.08, diameterTop: 0.45, diameterBottom: 0.3 }, scene);
-  thrust.position.y = -0.32; thrust.parent = drone;
-  const tm = new BABYLON.StandardMaterial('tm', scene);
-  tm.emissiveColor = new BABYLON.Color3(0.4, 0.7, 1);
-  tm.diffuseColor = new BABYLON.Color3(0.3, 0.5, 0.9);
-  thrust.material = tm; meshes.push(thrust);
-  const armPositions = [{x: 0.55, z: 0.55, isFront: true},{x: 0.55, z: -0.55, isFront: true},{x: -0.55, z: 0.55, isFront: false},{x: -0.55, z: -0.55, isFront: false}];
+
+  const body = BABYLON.MeshBuilder.CreateCylinder(`${prefix}Body`, { height: 0.25, diameter: 1.05, tessellation: 6 }, sceneRef);
+  body.parent = parent;
+  const bm = new BABYLON.StandardMaterial(`${prefix}BodyMat`, sceneRef);
+  bm.diffuseColor = droneColor3(palette.body.diffuse);
+  bm.emissiveColor = droneColor3(palette.body.emissive);
+  if (palette.body.specular) bm.specularColor = droneColor3(palette.body.specular);
+  body.material = bm;
+  meshes.push(body);
+
+  const lowerHull = BABYLON.MeshBuilder.CreateCylinder(`${prefix}LowerHull`, { height: 0.15, diameterTop: 1.0, diameterBottom: 0.7, tessellation: 6 }, sceneRef);
+  lowerHull.position.y = -0.2;
+  lowerHull.parent = parent;
+  lowerHull.material = bm;
+  meshes.push(lowerHull);
+
+  const dome = BABYLON.MeshBuilder.CreateSphere(`${prefix}Dome`, { diameter: 0.62, slice: 0.5 }, sceneRef);
+  dome.position.y = 0.12;
+  dome.parent = parent;
+  const dm = new BABYLON.StandardMaterial(`${prefix}DomeMat`, sceneRef);
+  dm.diffuseColor = droneColor3(palette.dome.diffuse);
+  dm.emissiveColor = droneColor3(palette.dome.emissive);
+  dm.alpha = palette.dome.alpha ?? 0.7;
+  dm.specularColor = new BABYLON.Color3(1, 1, 1);
+  dome.material = dm;
+  meshes.push(dome);
+
+  const nose = BABYLON.MeshBuilder.CreateCylinder(`${prefix}Nose`, { height: 0.55, diameterTop: 0.02, diameterBottom: 0.22 }, sceneRef);
+  nose.position = new BABYLON.Vector3(0.7, 0, 0);
+  nose.rotation.z = -Math.PI / 2;
+  nose.parent = parent;
+  const nm = new BABYLON.StandardMaterial(`${prefix}NoseMat`, sceneRef);
+  nm.diffuseColor = droneColor3(palette.nose.diffuse);
+  nm.emissiveColor = droneColor3(palette.nose.emissive);
+  nose.material = nm;
+  meshes.push(nose);
+
+  const strip = BABYLON.MeshBuilder.CreateBox(`${prefix}Strip`, { width: 0.04, height: 0.06, depth: 0.85 }, sceneRef);
+  strip.position = new BABYLON.Vector3(0, 0.15, 0);
+  strip.parent = parent;
+  const sm = new BABYLON.StandardMaterial(`${prefix}StripMat`, sceneRef);
+  sm.emissiveColor = droneColor3(palette.strip.emissive);
+  strip.material = sm;
+  meshes.push(strip);
+
+  const thrust = BABYLON.MeshBuilder.CreateCylinder(`${prefix}Thrust`, { height: 0.08, diameterTop: 0.45, diameterBottom: 0.3 }, sceneRef);
+  thrust.position.y = -0.32;
+  thrust.parent = parent;
+  const tm = new BABYLON.StandardMaterial(`${prefix}ThrustMat`, sceneRef);
+  tm.emissiveColor = droneColor3(palette.thrust.emissive);
+  tm.diffuseColor = droneColor3(palette.thrust.diffuse);
+  thrust.material = tm;
+  meshes.push(thrust);
+
+  const armPositions = [
+    { x: 0.55, z: 0.55, isFront: true },
+    { x: 0.55, z: -0.55, isFront: true },
+    { x: -0.55, z: 0.55, isFront: false },
+    { x: -0.55, z: -0.55, isFront: false },
+  ];
   armPositions.forEach((p, i) => {
-    const arm = BABYLON.MeshBuilder.CreateBox('a' + i, { width: 0.06, height: 0.06, depth: 0.42 }, scene);
+    const arm = BABYLON.MeshBuilder.CreateBox(`${prefix}Arm${i}`, { width: 0.06, height: 0.06, depth: 0.42 }, sceneRef);
     arm.position = new BABYLON.Vector3(p.x * 0.6, 0, p.z * 0.6);
     arm.rotation.y = Math.atan2(p.x, p.z);
-    arm.parent = drone;
-    const am = new BABYLON.StandardMaterial('am' + i, scene);
+    arm.parent = parent;
+    const am = new BABYLON.StandardMaterial(`${prefix}ArmMat${i}`, sceneRef);
     am.diffuseColor = new BABYLON.Color3(0.1, 0.13, 0.18);
-    arm.material = am; meshes.push(arm);
-    const motor = BABYLON.MeshBuilder.CreateCylinder('m' + i, { height: 0.1, diameter: 0.18 }, scene);
-    motor.position = new BABYLON.Vector3(p.x, 0.08, p.z); motor.parent = drone; motor.material = am; meshes.push(motor);
-    const led = BABYLON.MeshBuilder.CreateSphere('led' + i, { diameter: 0.1, segments: 8 }, scene);
-    led.position = new BABYLON.Vector3(p.x * 1.1, 0.08, p.z * 1.1); led.parent = drone;
-    const ledMat = new BABYLON.StandardMaterial('lm' + i, scene);
-    ledMat.emissiveColor = p.isFront ? new BABYLON.Color3(1, 0.25, 0.25) : new BABYLON.Color3(0.25, 1, 0.4);
-    led.material = ledMat; meshes.push(led);
-    const prop = BABYLON.MeshBuilder.CreateBox('p' + i, { width: 0.46, height: 0.015, depth: 0.04 }, scene);
-    prop.position = new BABYLON.Vector3(p.x, 0.16, p.z); prop.parent = drone;
-    const propM = new BABYLON.StandardMaterial('pm' + i, scene);
+    arm.material = am;
+    meshes.push(arm);
+
+    const motor = BABYLON.MeshBuilder.CreateCylinder(`${prefix}Motor${i}`, { height: 0.1, diameter: 0.18 }, sceneRef);
+    motor.position = new BABYLON.Vector3(p.x, 0.08, p.z);
+    motor.parent = parent;
+    motor.material = am;
+    meshes.push(motor);
+
+    const led = BABYLON.MeshBuilder.CreateSphere(`${prefix}Led${i}`, { diameter: 0.1, segments: 8 }, sceneRef);
+    led.position = new BABYLON.Vector3(p.x * 1.1, 0.08, p.z * 1.1);
+    led.parent = parent;
+    const ledMat = new BABYLON.StandardMaterial(`${prefix}LedMat${i}`, sceneRef);
+    ledMat.emissiveColor = droneColor3(p.isFront ? palette.ledFront : palette.ledRear);
+    led.material = ledMat;
+    meshes.push(led);
+
+    const prop = BABYLON.MeshBuilder.CreateBox(`${prefix}Prop${i}`, { width: 0.46, height: 0.015, depth: 0.04 }, sceneRef);
+    prop.position = new BABYLON.Vector3(p.x, 0.16, p.z);
+    prop.parent = parent;
+    const propM = new BABYLON.StandardMaterial(`${prefix}PropMat${i}`, sceneRef);
     propM.diffuseColor = new BABYLON.Color3(0.7, 0.7, 0.78);
     propM.alpha = 0.6;
-    prop.material = propM; propellers.push(prop); meshes.push(prop);
+    prop.material = propM;
+    propellerSink.push(prop);
+    meshes.push(prop);
   });
-  meshes.forEach(m => sg.addShadowCaster(m));
+
+  if (options.shadowGenerator) {
+    meshes.forEach((m) => options.shadowGenerator.addShadowCaster(m));
+  }
+
+  return { nose, propellers: propellerSink, meshes };
+}
+
+function createDrone(sg) {
+  drone = new BABYLON.TransformNode('drone', scene);
+  const built = buildDroneModel(scene, drone, 'player', {
+    idPrefix: 'player',
+    shadowGenerator: sg,
+    propellerSink: propellers,
+  });
+  drone._nose = built.nose;
   drone.position = new BABYLON.Vector3(0, 0.4, 0);
 }
 
@@ -1703,6 +2720,60 @@ function checkTreasureAt(gx, gz) {
   });
 }
 
+async function applyWindDrift() {
+  if (!isCodingMode() || stopRequested || crashed) return true;
+  const cell = getCurrentCell();
+  const wind = getWindZoneAt(cell.gx, cell.gz);
+  if (!wind) return true;
+  const push = WIND_PUSH[wind.direction || 'east'] || WIND_PUSH.east;
+  const tx = pos.x + push.dx * STEP;
+  const tz = pos.z + push.dz * STEP;
+  const pgx = Math.round(tx / STEP);
+  const pgz = Math.round(tz / STEP);
+  if (!checkBounds(tx, tz)) {
+    levelStats.hitObstacle = true;
+    crashed = true;
+    toast('🌪️ 被風場吹出界!', 'error');
+    updateUI('撞毀停機');
+    return false;
+  }
+  if (isSolidObstacleAt(pgx, pgz)) {
+    levelStats.hitObstacle = true;
+    crashed = true;
+    toast('🌪️ 被風場吹進障礙物!', 'error');
+    updateUI('撞毀停機');
+    return false;
+  }
+  toast(`🌪️ 風場向${push.label}推移!`, 'warn');
+  updateUI('風場漂移');
+  const sx = pos.x;
+  const sz = pos.z;
+  await animate((t) => {
+    pos.x = sx + (tx - sx) * t;
+    pos.z = sz + (tz - sz) * t;
+    drone.position.x = pos.x;
+    drone.position.z = pos.z;
+    updateUI();
+  }, 250);
+  if (!stopRequested) {
+    pos.x = tx;
+    pos.z = tz;
+    drone.position.x = tx;
+    drone.position.z = tz;
+    recordFlightPoint('wind');
+    levelStats.totalMoves++;
+    checkCheckpointAt(pgx, pgz);
+    checkTreasureAt(pgx, pgz);
+    checkSpecialObjectAt(pgx, pgz);
+    if (isAtTarget()) {
+      levelStats.atTarget = true;
+      toast('🎯 到達目標位置!', 'success');
+    }
+    updateUI('懸停');
+  }
+  return !crashed;
+}
+
 async function move(sign) {
   if (!flying) await takeoff();
   const v = getForwardVector();
@@ -1711,12 +2782,10 @@ async function move(sign) {
   const ngx = Math.round(tx / STEP);
   const ngz = Math.round(tz / STEP);
   if (!checkBounds(tx, tz)) { toast('🚫 出界,無法移動', 'error'); updateUI('出界'); return false; }
-  if (isObstacleAt(ngx, ngz)) {
-    // 🔧 FIX 3: 障礙物是實心高牆,撞上就立即停機並判定失敗
+  if (isSolidObstacleAt(ngx, ngz)) {
     if (isCodingMode()) { levelStats.hitObstacle = true; crashed = true; }
-    const type = getObstacleTypeAt(ngx, ngz);
-    const msg = type === 'vase' ? '🏺 撞上花瓶高牆,無人機停機!' : '🌿 撞上盆栽高叢,無人機停機!';
-    toast(msg, 'error'); updateUI('撞毀停機');
+    toast(obstacleHitMessage(getObstacleTypeAt(ngx, ngz)), 'error');
+    updateUI('撞毀停機');
     return false;
   }
   updateUI(sign>0?'前進中':'後退中');
@@ -1739,6 +2808,10 @@ async function move(sign) {
       targetProp = 0.3;
       setTimeout(() => { if (flying) targetProp = 0.18; }, 800);
     }
+    if (isCodingMode() && !crashed) {
+      const windOk = await applyWindDrift();
+      if (!windOk) return false;
+    }
   }
   return true;
 }
@@ -1751,9 +2824,10 @@ async function moveSide(sign) {
   const ngx = Math.round(tx / STEP);
   const ngz = Math.round(tz / STEP);
   if (!checkBounds(tx, tz)) { toast('🚫 出界,無法移動', 'error'); updateUI('出界'); return false; }
-  if (isObstacleAt(ngx, ngz)) {
+  if (isSolidObstacleAt(ngx, ngz)) {
     if (isCodingMode()) { levelStats.hitObstacle = true; crashed = true; }
-    toast('🚫 側移撞上障礙或禁飛區,無人機停機!', 'error'); updateUI('撞毀停機');
+    toast(obstacleHitMessage(getObstacleTypeAt(ngx, ngz)), 'error');
+    updateUI('撞毀停機');
     return false;
   }
   updateUI(sign > 0 ? '右移中' : '左移中');
@@ -1770,6 +2844,10 @@ async function moveSide(sign) {
       checkSpecialObjectAt(ngx, ngz);
     }
     updateUI('懸停');
+    if (isCodingMode() && !crashed) {
+      const windOk = await applyWindDrift();
+      if (!windOk) return false;
+    }
   }
   return true;
 }
@@ -1834,10 +2912,57 @@ function drawMinimap() {
     });
     ctx.stroke();
   }
-  (lv.obstacles || []).forEach(o => {
-    const m = toMM(o.gx, o.gz);
-    ctx.fillStyle = o.type === 'plant' ? '#4caf50' : '#7da8d8';
-    ctx.beginPath(); ctx.arc(m.x, m.y, Math.min(cellW, cellH) * 0.35, 0, Math.PI * 2); ctx.fill();
+  (lv.obstacles || []).forEach((o) => {
+    const type = o.type || 'vase';
+    const cells = [];
+    const halfW = Math.floor(GRID_W / 2);
+    const halfD = Math.floor(GRID_D / 2);
+    for (let gx = -halfW; gx < halfW; gx++) {
+      for (let gz = -halfD; gz < halfD; gz++) {
+        if (obstacleOccupiesCell(o, gx, gz)) cells.push({ gx, gz });
+      }
+    }
+    const colorMap = {
+      plant: '#4caf50',
+      tree: '#2e7d32',
+      rock: '#9e9e9e',
+      crate: '#8d6e63',
+      electricFence: '#ff9800',
+      laserBeam: '#f44336',
+      windZone: '#4fc3f7',
+      chargingStation: '#66bb6a',
+      noFlyZone: '#ef5350',
+      vase: '#7da8d8',
+    };
+    const color = colorMap[type] || '#7da8d8';
+    cells.forEach((cell) => {
+      const m = toMM(cell.gx, cell.gz);
+      if (type === 'laserBeam') {
+        ctx.fillStyle = color;
+        ctx.fillRect(m.x - cellW * 0.42, m.y - cellH * 0.42, cellW * 0.84, cellH * 0.84);
+      } else if (type === 'windZone') {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y - cellH * 0.35);
+        ctx.lineTo(m.x + cellW * 0.35, m.y);
+        ctx.lineTo(m.x, m.y + cellH * 0.35);
+        ctx.lineTo(m.x - cellW * 0.35, m.y);
+        ctx.closePath();
+        ctx.fill();
+      } else if (type === 'chargingStation') {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(m.x - cellW * 0.3, m.y - cellH * 0.3, cellW * 0.6, cellH * 0.6);
+      } else if (type === 'noFlyZone' || type === 'electricFence') {
+        ctx.fillStyle = color;
+        ctx.fillRect(m.x - cellW * 0.4, m.y - cellH * 0.4, cellW * 0.8, cellH * 0.8);
+      } else {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, Math.min(cellW, cellH) * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
   });
   (lv.checkpoints || []).forEach((cp, idx) => {
     const m = toMM(cp.gx, cp.gz);
@@ -1875,7 +3000,7 @@ function resetAll() {
   }
   if (busy) { stopRequested = true; setTimeout(resetAll, 100); return; }
   crashed = false;
-  if (mode === 'programming') {
+  if (mode === 'programming' || mode === 'battle') {
     const lv = LEVELS[currentLevel];
     pos = { x: lv.start.gx * STEP, z: lv.start.gz * STEP }; dir = lv.start.dir;
     flying = false; targetProp = 0;
@@ -3047,6 +4172,7 @@ function initBlockly() {
   });
   const speedSelect = document.getElementById('execSpeed');
   if (speedSelect) speedSelect.value = String(executionSpeed);
+  updateObstacleLabelsUI();
 }
 
 function clearBlocks() {
@@ -3066,6 +4192,12 @@ async function runProgram() {
     window.MissionMode?.runWorkspace?.();
     return;
   }
+  if (mode === 'battle' && window.BattleMode?.isActive?.()) {
+    if (!window.BattleMode.canRunProgram()) {
+      toast('⚔️ 對戰中請先完成編程回合，再按「確認出擊」', 'warn');
+      return;
+    }
+  }
   if (busy) return;
   debugStepCursor = null;
   saveBlocklyDraft();
@@ -3080,8 +4212,8 @@ async function runProgram() {
   document.getElementById('btnStop').disabled = false;
   try {
     await execChain(startBlock);
-    if (crashed) { toast('💥 無人機撞毀,本次任務失敗', 'error'); setTimeout(() => checkLevelComplete(), 400); }
-    else if (!stopRequested) { toast('✅ 程式執行完成', 'success'); setTimeout(() => checkLevelComplete(), 400); }
+    if (crashed) { toast('💥 無人機撞毀,本次任務失敗', 'error'); if (mode !== 'battle') setTimeout(() => checkLevelComplete(), 400); }
+    else if (!stopRequested) { toast('✅ 程式執行完成', 'success'); if (mode !== 'battle') setTimeout(() => checkLevelComplete(), 400); }
     else { toast('⏹ 程式被中止', 'warn'); }
   } catch(e) { toast('❌ 錯誤: ' + e.message, 'error'); console.error(e); }
   finally {
@@ -3096,6 +4228,10 @@ async function runProgram() {
 async function stepProgram() {
   if (mode === 'mission') {
     toast('👣 任務模式暫時使用「開始執行任務」完整執行', 'info');
+    return;
+  }
+  if (mode === 'battle' && window.BattleMode?.isActive?.() && !window.BattleMode.canRunProgram()) {
+    toast('⚔️ 對戰編程回合請專心寫積木', 'warn');
     return;
   }
   if (busy) return;
@@ -3155,692 +4291,226 @@ function buildLevelSelector() {
 }
 
 // ============================================================
-// 🏗️ Builder Mode (沙盒關卡設計)
+// 🏗️ Builder Mode — Level Studio (delegates to builder-mode.js)
 // ============================================================
-let builderActive = false;
-let builderTool = 'vase'; // 當前工具: vase, plant, checkpoint, treasure, start, target, erase
-let builderObstacles = [];
-let builderCheckpoints = [];
-let builderTreasures = [];
-let builderStart = { gx: 0, gz: 0, dir: 0 };
-let builderTarget = { gx: 4, gz: -3 };
-let builderMeshes = [];
-let builderPointerObs = null;
-let builderGhost = null;
-let builderCheckpointIdx = 0;
-let builderMeta = {
-  name: '自訂關卡',
-  desc: '你設計的關卡',
-  goal: '到達終點並降落',
-  hint: '用 Blockly 編程到達終點!',
-  maxMoves: 0,
-  requireCheckpoints: true,
-  requireTreasures: true,
+let builderTestActive = false;
+let builderTestLevelIdx = -1;
+
+const BUILDER_SCENE_PRESETS = {
+  default: {
+    sky: [0.05, 0.08, 0.13],
+    groundLight: '#e8d8b8',
+    groundDark: '#d4c098',
+    gridStroke: 'rgba(70,40,20,0.4)',
+  },
+  campus: { sky: [0.08, 0.14, 0.2], groundLight: '#2a5a3a', groundDark: '#1e4228', gridStroke: 'rgba(54,80,109,0.55)' },
+  farm: { sky: [0.08, 0.16, 0.12], groundLight: '#3a6a28', groundDark: '#2a5018', gridStroke: 'rgba(42,90,42,0.55)' },
+  coast: { sky: [0.12, 0.28, 0.42], groundLight: '#c8b890', groundDark: '#a89870', gridStroke: 'rgba(42,96,128,0.55)' },
+  space: { sky: [0.02, 0.02, 0.05], groundLight: '#3a3a50', groundDark: '#2a2a38', gridStroke: 'rgba(42,42,64,0.55)' },
+  volcano: { sky: [0.22, 0.08, 0.06], groundLight: '#6a4028', groundDark: '#4a2818', gridStroke: 'rgba(106,48,32,0.55)' },
+  warehouse: { sky: [0.06, 0.08, 0.12], groundLight: '#2a3040', groundDark: '#1a2030', gridStroke: 'rgba(58,63,72,0.55)' },
 };
 
-const BUILDER_TOOLS = [
-  { id: 'vase', icon: '🏺', label: '花瓶', cat: 'obstacle' },
-  { id: 'plant', icon: '🌿', label: '盆栽', cat: 'obstacle' },
-  { id: 'tree', icon: '🌳', label: '樹木', cat: 'obstacle' },
-  { id: 'rock', icon: '🪨', label: '岩石', cat: 'obstacle' },
-  { id: 'crate', icon: '📦', label: '木箱', cat: 'obstacle' },
-  { id: 'electricFence', icon: '⚡', label: '電網', cat: 'obstacle' },
-  { id: 'laserBeam', icon: '🔴', label: '激光', cat: 'obstacle' },
-  { id: 'windZone', icon: '🌪️', label: '風場', cat: 'obstacle' },
-  { id: 'chargingStation', icon: '🔋', label: '充電站', cat: 'special' },
-  { id: 'noFlyZone', icon: '🚫', label: '禁飛區', cat: 'obstacle' },
-  { id: 'checkpoint', icon: '🚩', label: '檢查點', cat: 'special' },
-  { id: 'scanPoint', icon: '📡', label: '掃描點', cat: 'special' },
-  { id: 'treasure', icon: '💎', label: '寶石', cat: 'special' },
-  { id: 'start', icon: '🟢', label: '起點', cat: 'pos' },
-  { id: 'target', icon: '🎯', label: '終點', cat: 'pos' },
-  { id: 'erase', icon: '🧹', label: '清除', cat: 'tool' },
-];
+function paintGridFloor(themeId) {
+  if (!defaultFloor?.material?.diffuseTexture) return;
+  const preset = BUILDER_SCENE_PRESETS[themeId] || BUILDER_SCENE_PRESETS.default;
+  const tex = defaultFloor.material.diffuseTexture;
+  const ctx2d = tex.getContext();
+  const TEX = tex.getSize().width;
+  const cx = TEX / GRID_W;
+  const cz = TEX / GRID_D;
+  for (let i = 0; i < GRID_W; i++) {
+    for (let j = 0; j < GRID_D; j++) {
+      ctx2d.fillStyle = ((i + j) % 2 === 0) ? preset.groundLight : preset.groundDark;
+      ctx2d.fillRect(i * cx, j * cz, cx, cz);
+    }
+  }
+  ctx2d.strokeStyle = preset.gridStroke;
+  ctx2d.lineWidth = 2;
+  for (let i = 0; i <= GRID_W; i++) {
+    ctx2d.beginPath();
+    ctx2d.moveTo(i * cx, 0);
+    ctx2d.lineTo(i * cx, TEX);
+    ctx2d.stroke();
+  }
+  for (let j = 0; j <= GRID_D; j++) {
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, j * cz);
+    ctx2d.lineTo(TEX, j * cz);
+    ctx2d.stroke();
+  }
+  tex.update();
+}
 
-function getBuilderLevelData() {
-  syncBuilderMetaFromForm();
+function applyBuilderScene(themeId) {
+  if (!scene) return;
+  const id = BUILDER_SCENE_PRESETS[themeId] ? themeId : 'campus';
+  const preset = BUILDER_SCENE_PRESETS[id];
+  scene.clearColor = new BABYLON.Color4(preset.sky[0], preset.sky[1], preset.sky[2], 1);
+  paintGridFloor(id);
+  window.MissionWeather?.dispose?.();
+  window.MissionWeather?.apply?.({ scene, root: null, theme: id });
+}
+
+function resetProgrammingScene() {
+  if (!scene) return;
+  window.MissionWeather?.dispose?.();
+  scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
+  const preset = BUILDER_SCENE_PRESETS.default;
+  scene.clearColor = new BABYLON.Color4(preset.sky[0], preset.sky[1], preset.sky[2], 1);
+  paintGridFloor('default');
+}
+
+function getBuilderCtx() {
   return {
-    v: 1,
-    meta: builderMeta,
-    s: builderStart,
-    t: builderTarget,
-    o: builderObstacles,
-    c: builderCheckpoints,
-    tr: builderTreasures,
+    scene,
+    canvas,
+    camera,
+    drone,
+    defaultFloor,
+    defaultWalls,
+    targetMarker,
+    startMarker,
+    STEP,
+    GRID_W,
+    GRID_D,
+    OBSTACLE_GUIDE,
+    cellToWorld,
+    obstacleOccupiesCell,
+    rebuildObstacles,
+    rebuildCheckpoints,
+    rebuildTreasures,
+    createVase,
+    createPlant,
+    createTree,
+    createRock,
+    createCrate,
+    createElectricFence,
+    createLaserBeam,
+    createWindZone,
+    createChargingStation,
+    createNoFlyZone,
+    createCheckpoint,
+    createTreasure,
+    hideMissionUI,
+    toast,
+    getSaveData: () => saveData,
+    persistSaveData,
+    getUserLabel: getMenuUserLabel,
+    syncCustomLevelToCloud,
+    setBuilderTestActive,
+    applyBuilderTestLevel,
+    showTestDrawer,
+    runBuilderTest,
+    resetBuilderTest,
+    applyBuilderScene,
+    resetProgrammingScene,
   };
-}
-
-function syncBuilderMetaFromForm() {
-  const name = document.getElementById('builderLevelName');
-  const desc = document.getElementById('builderLevelDesc');
-  const goal = document.getElementById('builderLevelGoal');
-  const hint = document.getElementById('builderLevelHint');
-  const maxMoves = document.getElementById('builderMaxMoves');
-  const requireCheckpoints = document.getElementById('builderRequireCheckpoints');
-  const requireTreasures = document.getElementById('builderRequireTreasures');
-  if (!name || !desc || !goal || !hint) return;
-  builderMeta = {
-    name: name.value.trim() || '自訂關卡',
-    desc: desc.value.trim() || '你設計的關卡',
-    goal: goal.value.trim() || '到達終點並降落',
-    hint: hint.value.trim() || '用 Blockly 編程到達終點!',
-    maxMoves: Math.max(0, Number(maxMoves?.value || 0)),
-    requireCheckpoints: requireCheckpoints ? requireCheckpoints.checked : true,
-    requireTreasures: requireTreasures ? requireTreasures.checked : true,
-  };
-}
-
-function updateBuilderMetaForm() {
-  const name = document.getElementById('builderLevelName');
-  const desc = document.getElementById('builderLevelDesc');
-  const goal = document.getElementById('builderLevelGoal');
-  const hint = document.getElementById('builderLevelHint');
-  const maxMoves = document.getElementById('builderMaxMoves');
-  const requireCheckpoints = document.getElementById('builderRequireCheckpoints');
-  const requireTreasures = document.getElementById('builderRequireTreasures');
-  if (!name || !desc || !goal || !hint) return;
-  name.value = builderMeta.name;
-  desc.value = builderMeta.desc;
-  goal.value = builderMeta.goal;
-  hint.value = builderMeta.hint;
-  if (maxMoves) maxMoves.value = builderMeta.maxMoves || 0;
-  if (requireCheckpoints) requireCheckpoints.checked = builderMeta.requireCheckpoints !== false;
-  if (requireTreasures) requireTreasures.checked = builderMeta.requireTreasures !== false;
-}
-
-function applyBuilderLevelData(data) {
-  builderMeta = {
-    ...builderMeta,
-    ...(data.meta || {}),
-  };
-  builderStart = data.s || { gx: 0, gz: 0, dir: 0 };
-  builderTarget = data.t || { gx: 4, gz: -3 };
-  builderObstacles = data.o || [];
-  builderCheckpoints = data.c || [];
-  builderTreasures = data.tr || [];
-  builderCheckpointIdx = builderCheckpoints.reduce((max, cp) => {
-    const code = cp.label ? cp.label.charCodeAt(0) - 64 : 0;
-    return code > max ? code : max;
-  }, 0);
-}
-
-function saveBuilderDraft() {
-  saveData.builderDraft = getBuilderLevelData();
-  persistSaveData();
-}
-
-function restoreBuilderDraft() {
-  if (!saveData.builderDraft) return false;
-  applyBuilderLevelData(saveData.builderDraft);
-  updateBuilderMetaForm();
-  return true;
 }
 
 function setupBuilderMode() {
-  document.body.classList.add('builder-mode');
-  document.body.classList.remove('freeflight-mode', 'mission-mode');
-  hideMissionUI();
-  
-  // Hide other modes UI
-  document.getElementById('blocksArea').style.display = 'none';
-  document.getElementById('divider').style.display = 'none';
-  document.getElementById('levelPanel').style.display = 'none';
-  document.getElementById('minimap').style.display = 'none';
-  document.getElementById('hud').style.display = 'none';
-  document.getElementById('gameHud').classList.remove('show');
-  document.getElementById('crosshair').classList.remove('show');
-  document.getElementById('gameInstructions').classList.remove('show');
-  
-  // Show builder UI
-  document.getElementById('builderToolbar').classList.add('show');
-  document.getElementById('builderPalette').classList.add('show');
-  document.getElementById('builderInfo').classList.add('show');
-  
-  // Setup scene
-  if (targetMarker) targetMarker.setEnabled(false);
-  if (startMarker) startMarker.setEnabled(false);
-  if (defaultFloor) defaultFloor.setEnabled(true);
-  if (defaultWalls) defaultWalls.forEach(w => w.setEnabled(true));
-  if (drone && drone._nose) drone._nose.setEnabled(false);
-  
-  if (camera) {
-    camera.attachControl(canvas, true);
-    camera.alpha = -Math.PI/2;
-    camera.beta = Math.PI/3.2;
-    camera.radius = 28;
-    camera.setTarget(BABYLON.Vector3.Zero());
-  }
-  scene.clearColor = new BABYLON.Color4(0.05, 0.08, 0.13, 1);
-  scene.fogMode = BABYLON.Scene.FOGMODE_NONE;
-  
-  // Reset drone to ground
-  drone.position = new BABYLON.Vector3(0, 0.4, 0);
-  drone.rotation = BABYLON.Vector3.Zero();
-  
-  // Init builder state
-  builderActive = true;
-  builderTool = 'vase';
-  builderObstacles = [];
-  builderCheckpoints = [];
-  builderTreasures = [];
-  builderStart = { gx: 0, gz: 0, dir: 0 };
-  builderTarget = { gx: 4, gz: -3 };
-  builderCheckpointIdx = 0;
-  restoreBuilderDraft();
-  updateBuilderMetaForm();
-  
-  // Clear existing level meshes (from programming mode)
-  rebuildObstacles([]);
-  rebuildCheckpoints([]);
-  rebuildTreasures([]);
-  
-  // Clear builder meshes
-  builderClearMeshes();
-  
-  // Show start & target markers
-  rebuildBuilderStart();
-  rebuildBuilderTarget();
-  
-  // Build toolbar buttons
-  buildBuilderToolbar();
-  buildBuilderPalette();
-  
-  // Setup pointer observer
-  setupBuilderPointer();
-  
-  // Update info
-  updateBuilderInfo();
-  
-  toast('🏗️ 設計模式已啟動!點撃網格放置物件', 'success');
+  window.BuilderMode?.enter?.(getBuilderCtx());
 }
 
 function teardownBuilderMode() {
-  builderActive = false;
-  hideBuilderUI();
-  builderClearMeshes();
-  // Clear builder data arrays
-  builderObstacles = [];
-  builderCheckpoints = [];
-  builderTreasures = [];
-  builderStart = { gx: 0, gz: 0, dir: 0 };
-  builderTarget = { gx: 4, gz: -3 };
-  builderCheckpointIdx = 0;
-  // Clear builder-placed objects from scene
-  rebuildObstacles([]);
-  rebuildCheckpoints([]);
-  rebuildTreasures([]);
+  window.BuilderMode?.exit?.();
+  resetProgrammingScene();
 }
 
-function buildBuilderToolbar() {
-  const container = document.getElementById('toolBtns');
-  container.innerHTML = '';
-  BUILDER_TOOLS.forEach(tool => {
-    const btn = document.createElement('button');
-    btn.className = 'tool-btn' + (builderTool === tool.id ? ' active' : '');
-    btn.innerHTML = `${tool.icon} ${tool.label}`;
-    btn.onclick = () => {
-      builderTool = tool.id;
-      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('.pal-item').forEach(p => p.classList.remove('active'));
-      const palItem = document.querySelector(`.pal-item[data-tool="${tool.id}"]`);
-      if (palItem) palItem.classList.add('active');
-    };
-    container.appendChild(btn);
-  });
+function setBuilderTestActive(active) {
+  builderTestActive = Boolean(active);
 }
 
-function buildBuilderPalette() {
-  const container = document.getElementById('palItems');
-  container.innerHTML = '';
-  BUILDER_TOOLS.forEach(tool => {
-    const item = document.createElement('div');
-    item.className = 'pal-item' + (builderTool === tool.id ? ' active' : '');
-    item.dataset.tool = tool.id;
-    item.innerHTML = `${tool.icon} ${tool.label}`;
-    item.onclick = () => {
-      builderTool = tool.id;
-      document.querySelectorAll('.pal-item').forEach(p => p.classList.remove('active'));
-      item.classList.add('active');
-      document.querySelectorAll('.tool-btn').forEach(b => {
-        if (b.textContent.includes(tool.label)) b.classList.add('active');
-        else b.classList.remove('active');
-      });
-    };
-    container.appendChild(item);
-  });
-}
-
-function setupBuilderPointer() {
-  builderPointerObs = scene.onPointerObservable.add((pointerInfo) => {
-    if (!builderActive) return;
-    if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERPICK) {
-      const pickResult = pointerInfo.pickInfo;
-      if (pickResult.hit && pickResult.pickedMesh === defaultFloor) {
-        const worldPos = pickResult.pickedPoint;
-        const gx = Math.round(worldPos.x / STEP);
-        const gz = Math.round(worldPos.z / STEP);
-        handleBuilderClick(gx, gz);
-      }
-    }
-  }, BABYLON.PointerEventTypes.POINTERPICK);
-}
-
-function handleBuilderClick(gx, gz) {
-  // Bounds check
-  const halfW = Math.floor(GRID_W / 2);
-  const halfD = Math.floor(GRID_D / 2);
-  if (gx < -halfW || gx >= halfW || gz < -halfD || gz >= halfD) {
-    toast('🚫 超出範圍', 'warn');
+function removeBuilderTestLevel() {
+  if (builderTestLevelIdx < 0 || builderTestLevelIdx >= LEVELS.length) {
+    builderTestLevelIdx = -1;
     return;
   }
-  
-  if (builderTool === 'erase') {
-    eraseAt(gx, gz);
-  } else if (builderTool === 'start') {
-    builderStart = { gx, gz, dir: 0 };
-    rebuildBuilderStart();
-  } else if (builderTool === 'target') {
-    builderTarget = { gx, gz };
-    rebuildBuilderTarget();
-  } else if (builderTool === 'vase' || builderTool === 'plant' || builderTool === 'tree' || builderTool === 'rock' || builderTool === 'crate' || builderTool === 'electricFence' || builderTool === 'laserBeam' || builderTool === 'windZone' || builderTool === 'chargingStation' || builderTool === 'noFlyZone') {
-    placeObstacle(gx, gz, builderTool);
-  } else if (builderTool === 'checkpoint') {
-    placeCheckpoint(gx, gz);
-  } else if (builderTool === 'scanPoint') {
-    placeCheckpoint(gx, gz, 'SCAN');
-  } else if (builderTool === 'treasure') {
-    placeTreasure(gx, gz);
-  }
-  
-  updateBuilderInfo();
+  LEVELS.splice(builderTestLevelIdx, 1);
+  builderTestLevelIdx = -1;
 }
 
-function placeObstacle(gx, gz, type) {
-  // Check if already exists
-  const existing = builderObstacles.find(o => o.gx === gx && o.gz === gz);
-  if (existing) {
-    toast('⚠️ 此位置已有物件', 'warn');
-    return;
-  }
-  
-  // Check start/target
-  if (gx === builderStart.gx && gz === builderStart.gz) {
-    toast('⚠️ 不能放在起點', 'warn');
-    return;
-  }
-  if (gx === builderTarget.gx && gz === builderTarget.gz) {
-    toast('⚠️ 不能放在終點', 'warn');
-    return;
-  }
-  
-  const obstacleData = { gx, gz, type };
-  if (type === 'laserBeam') {
-    const dir = prompt('激光方向？(horizontal = 橫向, vertical = 縱向)', 'horizontal');
-    obstacleData.direction = (dir === 'vertical') ? 'vertical' : 'horizontal';
-  } else if (type === 'windZone') {
-    const dir = prompt('風場方向？(east=東, west=西, north=北, south=南)', 'east');
-    obstacleData.direction = ['east', 'west', 'north', 'south'].includes(dir) ? dir : 'east';
-  }
-  
-  builderObstacles.push(obstacleData);
-  rebuildBuilderObstacles();
-  const icons = { vase: '🏺', plant: '🌿', tree: '🌳', rock: '🪨', crate: '📦', electricFence: '⚡', laserBeam: '🔴', windZone: '🌪️', chargingStation: '🔋', noFlyZone: '🚫' };
-  toast(`${icons[type] || '📦'} 已放置`, 'success');
-}
-
-function placeCheckpoint(gx, gz, prefix = '') {
-  const existing = builderCheckpoints.find(cp => cp.gx === gx && cp.gz === gz);
-  if (existing) {
-    toast('⚠️ 此位置已有檢查點', 'warn');
-    return;
-  }
-  
-  builderCheckpointIdx++;
-  const label = prefix || String.fromCharCode(64 + builderCheckpointIdx); // A, B, C...
-  builderCheckpoints.push({ gx, gz, label });
-  rebuildBuilderCheckpoints();
-  toast(`🚩 檢查點 ${label} 已放置`, 'success');
-}
-
-function placeTreasure(gx, gz) {
-  const existing = builderTreasures.find(t => t.gx === gx && t.gz === gz);
-  if (existing) {
-    toast('⚠️ 此位置已有寶石', 'warn');
-    return;
-  }
-  
-  builderTreasures.push({ gx, gz });
-  rebuildBuilderTreasures();
-  toast('💎 寶石已放置', 'success');
-}
-
-function eraseAt(gx, gz) {
-  let erased = false;
-  
-  const obsIdx = builderObstacles.findIndex(o => o.gx === gx && o.gz === gz);
-  if (obsIdx !== -1) {
-    builderObstacles.splice(obsIdx, 1);
-    rebuildBuilderObstacles();
-    erased = true;
-  }
-  
-  const cpIdx = builderCheckpoints.findIndex(cp => cp.gx === gx && cp.gz === gz);
-  if (cpIdx !== -1) {
-    builderCheckpoints.splice(cpIdx, 1);
-    rebuildBuilderCheckpoints();
-    erased = true;
-  }
-  
-  const trIdx = builderTreasures.findIndex(t => t.gx === gx && t.gz === gz);
-  if (trIdx !== -1) {
-    builderTreasures.splice(trIdx, 1);
-    rebuildBuilderTreasures();
-    erased = true;
-  }
-  
-  if (erased) {
-    toast('🧹 已清除', 'info');
-  } else {
-    toast('此位置沒有物件', 'info');
-  }
-}
-
-function disposeBuilderMeshes(type) {
-  builderMeshes.filter(m => m._builderType === type).forEach(m => {
-    if (m.getChildMeshes) m.getChildMeshes().forEach(c => {
-      if (c.material && c.material.diffuseTexture) { c.material.diffuseTexture.dispose(); }
-      if (c.material) c.material.dispose();
-      c.dispose();
-    });
-    m.dispose();
-  });
-  builderMeshes = builderMeshes.filter(m => m._builderType !== type);
-}
-
-function rebuildBuilderObstacles() {
-  disposeBuilderMeshes('obstacle');
-  const offset = Date.now() % 10000;
-  builderObstacles.forEach((obs, idx) => {
-    let mesh;
-    if (obs.type === 'vase') {
-      mesh = createVase(obs.gx, obs.gz, offset + idx);
-    } else if (obs.type === 'plant') {
-      mesh = createPlant(obs.gx, obs.gz, offset + idx);
-    } else if (obs.type === 'tree') {
-      mesh = createTree(obs.gx, obs.gz, offset + idx);
-    } else if (obs.type === 'rock') {
-      mesh = createRock(obs.gx, obs.gz, offset + idx);
-    } else if (obs.type === 'crate') {
-      mesh = createCrate(obs.gx, obs.gz, offset + idx);
-    } else if (obs.type === 'electricFence') {
-      mesh = createElectricFence(obs.gx, obs.gz, offset + idx);
-    } else if (obs.type === 'laserBeam') {
-      mesh = createLaserBeam(obs.gx, obs.gz, offset + idx, obs.direction || 'horizontal');
-    } else if (obs.type === 'windZone') {
-      mesh = createWindZone(obs.gx, obs.gz, offset + idx, obs.direction || 'east');
-    } else if (obs.type === 'chargingStation') {
-      mesh = createChargingStation(obs.gx, obs.gz, offset + idx);
-    } else if (obs.type === 'noFlyZone') {
-      mesh = createNoFlyZone(obs.gx, obs.gz, offset + idx);
-    } else {
-      mesh = createVase(obs.gx, obs.gz, offset + idx);
-    }
-    mesh._builderType = 'obstacle';
-    builderMeshes.push(mesh);
-  });
-}
-
-function rebuildBuilderCheckpoints() {
-  disposeBuilderMeshes('checkpoint');
-  const offset = Date.now() % 10000;
-  builderCheckpoints.forEach((cp, idx) => {
-    const mesh = createCheckpoint(cp, offset + idx);
-    mesh._builderType = 'checkpoint';
-    builderMeshes.push(mesh);
-  });
-}
-
-function rebuildBuilderTreasures() {
-  disposeBuilderMeshes('treasure');
-  const offset = Date.now() % 10000;
-  builderTreasures.forEach((t, idx) => {
-    const mesh = createTreasure(t, offset + idx);
-    mesh._builderType = 'treasure';
-    builderMeshes.push(mesh);
-  });
-}
-
-function rebuildBuilderStart() {
-  builderMeshes.filter(m => m._builderType === 'start').forEach(m => m.dispose());
-  builderMeshes = builderMeshes.filter(m => m._builderType !== 'start');
-  
-  const s = cellToWorld(builderStart.gx, builderStart.gz);
-  const startDisc = BABYLON.MeshBuilder.CreateGround('builderStart', { width: STEP*0.85, height: STEP*0.85 }, scene);
-  const sTex = new BABYLON.DynamicTexture('bsT', { width: 256, height: 256 }, scene, false);
-  const sCtx = sTex.getContext();
-  sCtx.fillStyle = 'rgba(80,200,120,0.7)';
-  sCtx.beginPath();
-  sCtx.arc(128, 128, 110, 0, Math.PI*2);
-  sCtx.fill();
-  sCtx.fillStyle = '#1a4a2a';
-  sCtx.font = 'bold 110px Arial';
-  sCtx.textAlign = 'center';
-  sCtx.textBaseline = 'middle';
-  sCtx.fillText('S', 128, 128);
-  sTex.update();
-  sTex.hasAlpha = true;
-  const sm = new BABYLON.StandardMaterial('bsm', scene);
-  sm.diffuseTexture = sTex;
-  sm.diffuseTexture.hasAlpha = true;
-  sm.useAlphaFromDiffuseTexture = true;
-  startDisc.material = sm;
-  startDisc.position = new BABYLON.Vector3(s.x, 0.02, s.z);
-  startDisc._builderType = 'start';
-  builderMeshes.push(startDisc);
-}
-
-function rebuildBuilderTarget() {
-  builderMeshes.filter(m => m._builderType === 'target').forEach(m => m.dispose());
-  builderMeshes = builderMeshes.filter(m => m._builderType !== 'target');
-  
-  const t = cellToWorld(builderTarget.gx, builderTarget.gz);
-  const targetDisc = BABYLON.MeshBuilder.CreateGround('builderTarget', { width: STEP*0.85, height: STEP*0.85 }, scene);
-  const tTex = new BABYLON.DynamicTexture('btT', { width: 256, height: 256 }, scene, false);
-  const tCtx = tTex.getContext();
-  tCtx.fillStyle = 'rgba(147,51,234,0.7)';
-  tCtx.beginPath();
-  tCtx.arc(128, 128, 110, 0, Math.PI*2);
-  tCtx.fill();
-  tCtx.fillStyle = '#4a1a6a';
-  tCtx.font = 'bold 90px Arial';
-  tCtx.textAlign = 'center';
-  tCtx.textBaseline = 'middle';
-  tCtx.fillText('🎯', 128, 128);
-  tTex.update();
-  tTex.hasAlpha = true;
-  const tm = new BABYLON.StandardMaterial('btm', scene);
-  tm.diffuseTexture = tTex;
-  tm.diffuseTexture.hasAlpha = true;
-  tm.useAlphaFromDiffuseTexture = true;
-  targetDisc.material = tm;
-  targetDisc.position = new BABYLON.Vector3(t.x, 0.02, t.z);
-  targetDisc._builderType = 'target';
-  builderMeshes.push(targetDisc);
-}
-
-function builderClearMeshes() {
-  builderMeshes.forEach(m => {
-    if (m.getChildMeshes) {
-      m.getChildMeshes().forEach(c => {
-        if (c.material && c.material.diffuseTexture) { try { c.material.diffuseTexture.dispose(); } catch(e) {} }
-        if (c.material) { try { c.material.dispose(); } catch(e) {} }
-        c.dispose();
-      });
-    }
-    m.dispose();
-  });
-  builderMeshes = [];
-}
-
-function builderClearAll() {
-  if (!confirm('確定要清空所有物件嗎?')) return;
-  builderObstacles = [];
-  builderCheckpoints = [];
-  builderTreasures = [];
-  builderCheckpointIdx = 0;
-  saveData.builderDraft = null;
-  persistSaveData();
-  builderClearMeshes();
-  rebuildBuilderStart();
-  rebuildBuilderTarget();
-  updateBuilderInfo();
-  toast('🗑️ 已清空', 'info');
-}
-
-function updateBuilderInfo() {
-  document.getElementById('bInfoObs').textContent = builderObstacles.length;
-  document.getElementById('bInfoCp').textContent = builderCheckpoints.length;
-  document.getElementById('bInfoTr').textContent = builderTreasures.length;
-  if (builderActive) saveBuilderDraft();
-  
-  // Show current hover cell (updated via pointer move)
-  scene.onPointerMove = (evt) => {
-    if (!builderActive) return;
-    const pickResult = scene.pick(evt.offsetX, evt.offsetY);
-    if (pickResult.hit && pickResult.pickedMesh === defaultFloor) {
-      const worldPos = pickResult.pickedPoint;
-      const gx = Math.round(worldPos.x / STEP);
-      const gz = Math.round(worldPos.z / STEP);
-      document.getElementById('bInfoCell').textContent = `(${gx}, ${gz})`;
-    }
-  };
-}
-
-function builderTestRun() {
-  if (builderObstacles.length === 0 && builderCheckpoints.length === 0 && builderTreasures.length === 0) {
-    toast('⚠️ 請先放置一些物件', 'warn');
-    return;
-  }
-  
-  // Switch to programming mode with this level
-  const builderData = getBuilderLevelData();
-  const testLevel = {
-    name: builderData.meta.name,
-    desc: builderData.meta.desc,
-    start: builderStart,
-    target: builderTarget,
-    obstacles: builderObstacles,
-    checkpoints: builderCheckpoints,
-    treasures: builderTreasures,
-    goal: builderData.meta.goal,
-    hint: builderData.meta.hint,
+function buildBuilderTestLevel(builderData) {
+  const cps = builderData.c || [];
+  const trs = builderData.tr || [];
+  return {
+    name: builderData.meta?.name || '自訂關卡',
+    desc: builderData.meta?.desc || '',
+    start: builderData.s || { gx: 0, gz: 0, dir: 0 },
+    target: builderData.t || { gx: 4, gz: -3 },
+    obstacles: builderData.o || [],
+    checkpoints: cps,
+    treasures: trs,
+    goal: builderData.meta?.goal || '到達終點並降落',
+    hint: builderData.meta?.hint || '用 Blockly 編程到達終點!',
     chapter: 'builder',
     difficulty: 2,
     objective: '測試自訂關卡是否可完成',
     check: (s) => {
-      const hasCheckpoints = builderCheckpoints.length > 0;
-      const hasTreasures = builderTreasures.length > 0;
-      const withinMoveLimit = !builderData.meta.maxMoves || s.totalMoves <= builderData.meta.maxMoves;
+      const hasCheckpoints = cps.length > 0;
+      const hasTreasures = trs.length > 0;
+      const maxMoves = builderData.meta?.maxMoves || 0;
+      const withinMoveLimit = !maxMoves || s.totalMoves <= maxMoves;
+      const requireCheckpoints = builderData.meta?.requireCheckpoints !== false;
+      const requireTreasures = builderData.meta?.requireTreasures !== false;
       return s.atTarget && s.landed && !s.hitObstacle &&
         withinMoveLimit &&
-        (!builderData.meta.requireCheckpoints || !hasCheckpoints || (s.checkpointOrderCorrect && s.checkpointsVisitedCount === builderCheckpoints.length)) &&
-        (!builderData.meta.requireTreasures || !hasTreasures || s.treasuresCollectedCount === builderTreasures.length);
+        (!requireCheckpoints || !hasCheckpoints || (s.checkpointOrderCorrect && s.checkpointsVisitedCount === cps.length)) &&
+        (!requireTreasures || !hasTreasures || s.treasuresCollectedCount === trs.length);
     },
-    solutionXml: () => '<block type="event_start"></block>'
+    solutionXml: () => '<block type="event_start"></block>',
   };
-  
-  // Temporarily add to LEVELS
+}
+
+function applyBuilderTestLevel(builderData) {
+  const testLevel = buildBuilderTestLevel(builderData);
+  removeBuilderTestLevel();
   LEVELS.push(testLevel);
-  const testIdx = LEVELS.length - 1;
-  
-  // Switch mode
-  enterMode('programming');
-  loadLevel(testIdx);
-  
-  toast('▶ 試玩模式!完成後返回選單', 'success');
+  builderTestLevelIdx = LEVELS.length - 1;
+  if (targetMarker) targetMarker.setEnabled(true);
+  if (startMarker) startMarker.setEnabled(true);
+  if (drone?._nose) drone._nose.setEnabled(true);
+  loadLevel(builderTestLevelIdx);
 }
 
-function builderShowShare() {
-  saveBuilderDraft();
-  const code = encodeBuilderLevel();
-  syncCustomLevelToCloud(getBuilderLevelData());
-  document.getElementById('shareCodeOut').value = code;
-  document.getElementById('builderShareModal').classList.add('show');
+function runBuilderTest() {
+  if (!workspace) return;
+  suppressWorkspaceSave = true;
+  workspace.clear();
+  const xml = '<xml><block type="event_start" x="40" y="40"></block></xml>';
+  Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), workspace);
+  suppressWorkspaceSave = false;
+  updateFailUI();
+  updateExtrasUI();
+  updateUI('待機');
 }
 
-function closeBuilderShare() {
-  document.getElementById('builderShareModal').classList.remove('show');
+function resetBuilderTest() {
+  if (busy) stopRequested = true;
+  removeBuilderTestLevel();
+  flying = false;
+  targetProp = 0;
+  crashed = false;
+  flightPath = [];
+  levelStats = createEmptyStats();
+  if (targetMarker) targetMarker.setEnabled(false);
+  if (startMarker) startMarker.setEnabled(false);
+  if (drone?._nose) drone._nose.setEnabled(false);
+  rebuildObstacles([]);
+  rebuildCheckpoints([]);
+  rebuildTreasures([]);
 }
 
-function switchShareTab(tab) {
-  document.querySelectorAll('.share-tab').forEach(t => t.classList.remove('active'));
-  if (tab === 'code') {
-    document.querySelector('.share-tab:first-child').classList.add('active');
-    document.getElementById('shareTabCode').style.display = 'block';
-    document.getElementById('shareTabImport').style.display = 'none';
-  } else {
-    document.querySelector('.share-tab:last-child').classList.add('active');
-    document.getElementById('shareTabCode').style.display = 'none';
-    document.getElementById('shareTabImport').style.display = 'block';
-  }
-}
-
-function encodeBuilderLevel() {
-  const json = JSON.stringify(getBuilderLevelData());
-  return btoa(unescape(encodeURIComponent(json)));
-}
-
-function decodeBuilderLevel(code) {
-  try {
-    const json = decodeURIComponent(escape(atob(code)));
-    return JSON.parse(json);
-  } catch (e) {
-    return null;
-  }
-}
-
-function copyShareCode() {
-  const code = document.getElementById('shareCodeOut').value;
-  navigator.clipboard.writeText(code).then(() => {
-    toast('📋 已複製關卡碼!', 'success');
-  }).catch(() => {
-    // Fallback
-    document.getElementById('shareCodeOut').select();
-    document.execCommand('copy');
-    toast('📋 已複製!', 'success');
-  });
-}
-
-function importShareCode() {
-  const code = document.getElementById('shareCodeIn').value.trim();
-  if (!code) {
-    toast('⚠️ 請貼上關卡碼', 'warn');
-    return;
-  }
-  
-  const data = decodeBuilderLevel(code);
-  if (!data) {
-    toast('❌ 關卡碼無效', 'error');
-    return;
-  }
-  
-  // Load into builder. Older share codes without v/meta are still supported.
-  applyBuilderLevelData(data);
-  updateBuilderMetaForm();
-  saveBuilderDraft();
-  
-  // Rebuild meshes
-  builderClearMeshes();
-  rebuildBuilderObstacles();
-  rebuildBuilderCheckpoints();
-  rebuildBuilderTreasures();
-  rebuildBuilderStart();
-  rebuildBuilderTarget();
-  updateBuilderInfo();
-  
-  closeBuilderShare();
-  toast('📥 關卡已匯入!', 'success');
+function showTestDrawer(show) {
+  const on = Boolean(show);
+  document.getElementById('hud').style.display = on ? 'block' : 'none';
+  document.getElementById('minimap').style.display = on ? 'block' : 'none';
+  document.getElementById('levelPanel').style.display = 'none';
+  if (!on && busy) stopRequested = true;
+  setTimeout(() => {
+    if (engine) engine.resize();
+    if (workspace) Blockly.svgResize(workspace);
+  }, 80);
 }
 
 function bootApp() {
@@ -3848,13 +4518,18 @@ function bootApp() {
   initResizer();
   buildLevelSelector();
   loadLevel(0);
+  window.StartMenu?.init?.({
+    onEnter: enterMode,
+    onModeChange: (mode) => { void applyMenuPreviewScene(mode.id); },
+    getProgrammingStats: getProgrammingMenuStats,
+    getBattleStats: getBattleMenuStats,
+    hasBuilderDraft,
+    getUserLabel: getMenuUserLabel,
+  });
   updateRoleUI();
   renderLocalLeaderboard();
   updateMissionMenuProgress();
-  ['builderLevelName', 'builderLevelDesc', 'builderLevelGoal', 'builderLevelHint', 'builderMaxMoves', 'builderRequireCheckpoints', 'builderRequireTreasures'].forEach((id) => {
-    const field = document.getElementById(id);
-    if (field) field.addEventListener('input', saveBuilderDraft);
-  });
+  if (document.getElementById('startMenu')?.classList.contains('show')) enableMenuPreview();
   window.addEventListener('drone-cloud-ready', updateRoleUI);
   window.addEventListener('drone-cloud-auth', () => { updateRoleUI(); updateMissionMenuProgress(); });
   window.addEventListener('drone-mission-progress', updateMissionMenuProgress);
@@ -3868,8 +4543,8 @@ async function updateMissionMenuProgress() {
     const chapters = data.chapters || data;
     const progress = window.MissionProgress?.loadProgress?.() || {};
     const total = window.MissionProgress?.getTotalProgress?.(chapters, progress) || { completed: 0, total: 0 };
-    const tag = document.querySelector('.mode-card.mission .feature-tag.mission-progress');
-    if (tag) tag.textContent = `🏁 ${total.completed}/${total.total}`;
+    window.StartMenu?.setMissionStats?.(total.completed, total.total);
+    window.StartMenu?.refreshStats?.();
   } catch (error) {
     console.warn('Failed to update mission menu progress', error);
   }

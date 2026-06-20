@@ -721,7 +721,8 @@
             "確認入口安全再深入災區。"
           ],
           "storyBeat": 5,
-          "storyTitle": "廢墟求救"
+          "storyTitle": "廢墟求救",
+          "showPatrolRoutes": true
         },
         {
           "id": "rescue-2",
@@ -1329,6 +1330,14 @@
             {
               "block": "mission_photo",
               "hint": "在同一點拍照留底"
+            },
+            {
+              "block": "mission_wind_ahead",
+              "hint": "可加入「前方有風區?」規劃路線"
+            },
+            {
+              "block": "mission_strong_wind_ahead",
+              "hint": "逆風會多耗電，考慮繞路"
             }
           ],
           "storyBeat": 10,
@@ -1488,6 +1497,10 @@
             {
               "block": "control_repeat",
               "hint": "可用重複積木減少積木數量"
+            },
+            {
+              "block": "mission_strong_wind_ahead",
+              "hint": "用「前方逆風?」避開耗電路線"
             }
           ],
           "storyBeat": 11,
@@ -1531,7 +1544,8 @@
           "type": "gate",
           "label": "安全閘門",
           "x": -1,
-          "z": 1
+          "z": 1,
+          "closed": false
         }
       ],
       "missions": [
@@ -1875,7 +1889,8 @@
           },
           "stars": {
             "moves": 28,
-            "battery": 55
+            "battery": 55,
+            "blocks": 16
           },
           "concept": "state-battery",
           "conceptLabel": "狀態：電量管理",
@@ -1900,7 +1915,8 @@
             }
           ],
           "storyBeat": 14,
-          "storyTitle": "夜間配送"
+          "storyTitle": "夜間配送",
+          "timeLimitSec": 120
         }
       ]
     },
@@ -2609,6 +2625,14 @@
             {
               "block": "mission_scan",
               "hint": "到風箏格執行掃描"
+            },
+            {
+              "block": "mission_wind_ahead",
+              "hint": "海風區可用感測積木判斷"
+            },
+            {
+              "block": "mission_strong_wind_ahead",
+              "hint": "逆風時改轉向繞路"
             }
           ],
           "storyBeat": 19,
@@ -2727,6 +2751,10 @@
             {
               "block": "action_land",
               "hint": "回起點後降落"
+            },
+            {
+              "block": "mission_strong_wind_ahead",
+              "hint": "綜合運用逆風感測規劃路線"
             }
           ],
           "storyBeat": 20,
@@ -3334,6 +3362,46 @@
               "block": "mission_photo",
               "hint": "在觀測點拍照"
             }
+          ],
+          "phases": [
+            {
+              "id": "scan",
+              "title": "第一階段：掃描",
+              "objectives": [
+                "scan:觀測掃描點"
+              ]
+            },
+            {
+              "id": "photo",
+              "title": "第二階段：拍照",
+              "objectives": [
+                "photos"
+              ],
+              "requires": [
+                "scan"
+              ]
+            },
+            {
+              "id": "report",
+              "title": "第三階段：回報",
+              "objectives": [
+                "report:山頂終端"
+              ],
+              "requires": [
+                "photo"
+              ]
+            },
+            {
+              "id": "return",
+              "title": "第四階段：回航",
+              "objectives": [
+                "return",
+                "landed"
+              ],
+              "requires": [
+                "report"
+              ]
+            }
           ]
         }
       ]
@@ -3368,13 +3436,15 @@
           "type": "gate",
           "label": "第一道閘門",
           "x": -1,
-          "z": 2
+          "z": 2,
+          "closed": false
         },
         {
           "type": "gate",
           "label": "安全閘門",
           "x": 3,
-          "z": -2
+          "z": -2,
+          "closed": false
         },
         {
           "type": "labBench",
@@ -3460,7 +3530,7 @@
           "dialogueStart": [
             {
               "speaker": "Dr. 林",
-              "text": "地圖上有兩個發光標記：黃色是「淨化入口」要先掃描，藍色是「登記終端」要回報數據。"
+              "text": "地圖上有黃色「淨化入口」與紅色發光「氣閘門」。先掃描入口，閘門才會開，才能到北邊藍色「登記終端」。"
             },
             {
               "speaker": "教官",
@@ -3498,8 +3568,8 @@
             {
               "type": "report",
               "label": "登記終端",
-              "x": 2,
-              "z": 1
+              "x": 0,
+              "z": 2
             },
             {
               "type": "hazard",
@@ -3514,10 +3584,31 @@
               "z": 0
             },
             {
+              "type": "hazard",
+              "label": "東側封鎖A",
+              "x": 1,
+              "z": 0
+            },
+            {
+              "type": "hazard",
+              "label": "東側封鎖B",
+              "x": 2,
+              "z": 0
+            },
+            {
+              "type": "hazard",
+              "label": "東側封鎖C",
+              "x": 1,
+              "z": 1
+            },
+            {
               "type": "gate",
               "label": "氣閘門",
               "x": 0,
-              "z": 1
+              "z": 1,
+              "closed": true,
+              "opensOn": "scan:淨化入口",
+              "hint": "先掃描淨化入口"
             },
             {
               "type": "shelf",
@@ -3552,7 +3643,8 @@
                   "x": -7,
                   "z": -6
                 }
-              ]
+              ],
+              "warnRadius": 2
             }
           ],
           "success": {
@@ -3569,14 +3661,53 @@
           "conceptLabel": "實驗室登記",
           "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
           "hintSteps": [
-            "飛到黃色光柱「淨化入口」，執行「掃描任務點」。",
-            "再到藍色光柱「登記終端」，執行「回報數據」。",
-            "避開巡邏行人，回起點後降落。"
+            "飛到黃色光柱「淨化入口」掃描，氣閘門會開啟。",
+            "通過氣閘門到藍色「登記終端」回報數據。",
+            "用「前方有行人?」避讓巡邏員，回起點降落。"
           ],
           "tutorialChecks": [
             {
+              "block": "mission_scan",
+              "hint": "先掃描淨化入口以開啟氣閘門"
+            },
+            {
               "block": "mission_report",
-              "hint": "到藍色光柱「登記終端」執行回報數據"
+              "hint": "到登記終端回報數據"
+            },
+            {
+              "block": "mission_npc_ahead",
+              "hint": "可加入「前方有行人?」避讓"
+            }
+          ],
+          "showPatrolRoutes": true,
+          "phases": [
+            {
+              "id": "scan",
+              "title": "第一階段：掃描",
+              "objectives": [
+                "scan:淨化入口"
+              ]
+            },
+            {
+              "id": "report",
+              "title": "第二階段：登記",
+              "objectives": [
+                "report:登記終端"
+              ],
+              "requires": [
+                "scan"
+              ]
+            },
+            {
+              "id": "return",
+              "title": "第三階段：回航",
+              "objectives": [
+                "return",
+                "landed"
+              ],
+              "requires": [
+                "report"
+              ]
             }
           ]
         },
@@ -3628,8 +3759,8 @@
             {
               "type": "dropoff",
               "label": "分析平台",
-              "x": 3,
-              "z": -1
+              "x": 0,
+              "z": -3
             },
             {
               "type": "report",
@@ -3650,10 +3781,25 @@
               "z": -1
             },
             {
+              "type": "hazard",
+              "label": "東側封鎖A",
+              "x": 1,
+              "z": -2
+            },
+            {
+              "type": "hazard",
+              "label": "東側封鎖B",
+              "x": 2,
+              "z": -2
+            },
+            {
               "type": "gate",
               "label": "樣本通道",
               "x": 0,
-              "z": -2
+              "z": -2,
+              "closed": true,
+              "opensOn": "pickup",
+              "hint": "先至標本櫃取貨"
             },
             {
               "type": "labBench",
@@ -3740,22 +3886,59 @@
           "conceptLabel": "標本運送",
           "starterXml": "<xml><block type=\"event_start\" x=\"40\" y=\"40\"></block></xml>",
           "hintSteps": [
-            "到橙色光柱「標本櫃」執行「取貨」。",
-            "到紫色光柱「分析平台」執行「放貨」。",
-            "到藍色光柱「分析終端」執行「回報數據」，回起點降落。"
+            "到「標本櫃」取貨，樣本通道閘門會開啟。",
+            "通過閘門到「分析平台」放貨並回報。",
+            "注意行人巡邏路線（橘色地面線）。"
           ],
           "tutorialChecks": [
             {
               "block": "mission_pickup",
-              "hint": "到標本櫃取貨"
+              "hint": "取貨後樣本通道才會開啟"
             },
             {
-              "block": "mission_dropoff",
-              "hint": "到分析平台放貨"
+              "block": "mission_npc_ahead",
+              "hint": "可加入「前方有行人?」判斷"
+            }
+          ],
+          "showPatrolRoutes": true,
+          "phases": [
+            {
+              "id": "pickup",
+              "title": "第一階段：取貨",
+              "objectives": [
+                "picked"
+              ]
             },
             {
-              "block": "mission_report",
-              "hint": "到終端回報數據"
+              "id": "dropoff",
+              "title": "第二階段：放貨",
+              "objectives": [
+                "delivered"
+              ],
+              "requires": [
+                "pickup"
+              ]
+            },
+            {
+              "id": "report",
+              "title": "第三階段：回報",
+              "objectives": [
+                "report:分析終端"
+              ],
+              "requires": [
+                "dropoff"
+              ]
+            },
+            {
+              "id": "return",
+              "title": "第四階段：回航",
+              "objectives": [
+                "return",
+                "landed"
+              ],
+              "requires": [
+                "report"
+              ]
             }
           ]
         },
@@ -3855,7 +4038,10 @@
               "type": "gate",
               "label": "考核閘門",
               "x": -2,
-              "z": 1
+              "z": 1,
+              "closed": true,
+              "opensOn": "scan:考核掃描點",
+              "hint": "先掃描考核掃描點"
             },
             {
               "type": "labBench",
@@ -3942,8 +4128,9 @@
             "landed": true
           },
           "stars": {
-            "moves": 40,
-            "battery": 35
+            "moves": 50,
+            "battery": 40,
+            "blocks": 18
           },
           "concept": "composite",
           "conceptLabel": "終極畢業考核",
@@ -3965,6 +4152,47 @@
             {
               "block": "mission_report",
               "hint": "到終端回報"
+            }
+          ],
+          "timeLimitSec": 180,
+          "phases": [
+            {
+              "id": "scan",
+              "title": "第一階段：掃描",
+              "objectives": [
+                "scan:考核掃描點"
+              ]
+            },
+            {
+              "id": "sample",
+              "title": "第二階段：採樣",
+              "objectives": [
+                "sample:考核樣本"
+              ],
+              "requires": [
+                "scan"
+              ]
+            },
+            {
+              "id": "report",
+              "title": "第三階段：回報",
+              "objectives": [
+                "report:畢業終端"
+              ],
+              "requires": [
+                "sample"
+              ]
+            },
+            {
+              "id": "return",
+              "title": "第四階段：回航",
+              "objectives": [
+                "return",
+                "landed"
+              ],
+              "requires": [
+                "report"
+              ]
             }
           ]
         }
